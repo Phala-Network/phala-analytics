@@ -6,8 +6,16 @@
 //
 // toBlock defaults to the finalized head. CHUNK_SIZE (default 10000) and
 // CONCURRENCY (default 4) tune eth_getLogs batching for the RPC plan in use.
+// Ranges the provider rejects as too wide are split automatically.
 
-import {createPublicClient, formatUnits, http, isAddressEqual, parseAbi} from 'viem'
+import {
+  BaseError,
+  createPublicClient,
+  formatUnits,
+  http,
+  isAddressEqual,
+  parseAbi,
+} from 'viem'
 import {mainnet} from 'viem/chains'
 
 const VAULT = '0x21d6eC8fc14CaAcc55aFA23cBa66798DAB3a0ec0'
@@ -39,10 +47,28 @@ for (let from = START_BLOCK; from <= toBlock; from += chunkSize) {
   ranges.push([from, to < toBlock ? to : toBlock])
 }
 
-const fetchRange = ([fromBlock, to]: [bigint, bigint]) =>
+const getLogs = (fromBlock: bigint, to: bigint) =>
   client.getLogs({address: VAULT, events, fromBlock, toBlock: to, strict: true})
 
-type Log = Awaited<ReturnType<typeof fetchRange>>[number]
+type Log = Awaited<ReturnType<typeof getLogs>>[number]
+
+// Providers cap eth_getLogs ranges differently, and Goldsky Edge's cap varies
+// with the upstream serving a request, so a rejected range is halved.
+const fetchRange = async ([fromBlock, to]: [bigint, bigint]): Promise<Log[]> => {
+  try {
+    return await getLogs(fromBlock, to)
+  } catch (error) {
+    const tooWide =
+      error instanceof BaseError &&
+      /range|limit|too many|exceed/i.test(error.details)
+    if (!tooWide || to === fromBlock) throw error
+    const mid = (fromBlock + to) / 2n
+    return [
+      ...(await fetchRange([fromBlock, mid])),
+      ...(await fetchRange([mid + 1n, to])),
+    ]
+  }
+}
 const logs: Log[] = []
 let done = 0
 const queue = [...ranges]
