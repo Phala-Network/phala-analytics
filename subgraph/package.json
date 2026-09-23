@@ -1,0 +1,18 @@
+{
+  "name": "phala-vault-state-subgraph",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph codegen && graph build",
+    "replay": "bun scripts/replay.ts"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "0.98.1",
+    "@graphprotocol/graph-ts": "0.38.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "viem": "^2.56.8"
+  }
+}

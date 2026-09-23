@@ -1,0 +1,24 @@
+"""
+PHA locked in the Vault by pending unstake requests, reconstructed from Vault
+events. Singleton with id "current".
+"""
+type VaultState @entity(immutable: false) {
+  id: ID!
+  vaultUnstakeLocked: BigInt!
+  updatedAtBlock: BigInt!
+  updatedAtTimestamp: BigInt!
+}
+
+"""
+Value of vaultUnstakeLocked after each event that changed it, for
+deterministic historical lookups.
+"""
+type VaultStateCheckpoint @entity(immutable: true) {
+  id: Bytes!
+  vaultUnstakeLocked: BigInt!
+  delta: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+  logIndex: BigInt!
+}
