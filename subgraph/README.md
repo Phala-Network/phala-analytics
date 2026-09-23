@@ -72,6 +72,12 @@ Deploy changes as a new version (for example `1.0.1`). Once it is synced with
 `goldsky subgraph tag create phala-vault-state/<version> --tag prod` and
 delete the old version. Consumers keep using the `prod` endpoint.
 
+The project runs on Goldsky's free allowance of 2,250 subgraph worker hours
+per month, which fits exactly three always-on subgraphs (this one plus
+`phala-claimer` and `khala-claimer`, used by the Phala App). Keep a fourth
+version running only while it syncs, and delete the old one right after
+moving the tag.
+
 ## Independent replay
 
 `scripts/replay.ts` rebuilds the value directly from Ethereum logs, without any
