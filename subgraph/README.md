@@ -49,18 +49,28 @@ Value at a historical block:
 { vaultState(id: "current", block: { number: 25390163 }) { vaultUnstakeLocked } }
 ```
 
+## Deployment
+
+Deployed in the Phala Goldsky project (`project_cmdgxxcewrqdi01wx9e7md0ek`) as
+`phala-vault-state/1.0.0`, tagged `prod`. Consumers use the tag endpoint:
+
+```text
+https://api.goldsky.com/api/public/project_cmdgxxcewrqdi01wx9e7md0ek/subgraphs/phala-vault-state/prod/gn
+```
+
 ## Build and deploy
 
 ```bash
 bun install
 bun run build
 goldsky login   # API key of the Phala Goldsky project
-goldsky subgraph deploy phala-vault-state/1.0.0 --path .
+goldsky subgraph deploy phala-vault-state/<version> --path .
 ```
 
-Deploy new versions under a new version tag (for example `1.0.1`), wait until
-they are synced with `hasIndexingErrors: false`, then switch the API's
-`GOLDSKY_VAULT_STATE_URL` (or move a Goldsky tag) and delete the old version.
+Deploy changes as a new version (for example `1.0.1`). Once it is synced with
+`hasIndexingErrors: false` and matches the current version, move the tag with
+`goldsky subgraph tag create phala-vault-state/<version> --tag prod` and
+delete the old version. Consumers keep using the `prod` endpoint.
 
 ## Independent replay
 
