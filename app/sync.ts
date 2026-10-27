@@ -116,6 +116,10 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
       }
       if (response.status === 404) {
         await response.body?.cancel()
+        if (date < yesterday)
+          throw new Error(
+            `Circulation snapshot missing for completed UTC date: ${date}`,
+          )
         console.log(`Circulation snapshot not finalized: ${date}`)
         break
       }

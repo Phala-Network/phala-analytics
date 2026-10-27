@@ -30,6 +30,7 @@ for (const mode of [
   'log-server',
   'write-fail',
   'snapshot-404',
+  'old-snapshot-404',
 ]) {
   const runtime = new Miniflare(
     convertV4MiniflareOptions({
@@ -78,7 +79,7 @@ for (const mode of [
                 totalCirculation: '102', ethereum: {timestamp: env.NOW},
               })
               if (url.pathname === '/api/snapshot') {
-                if (env.MODE === 'snapshot-404') return failure(404)
+                if (env.MODE === 'snapshot-404' || env.MODE === 'old-snapshot-404') return failure(404)
                 return Response.json({date: env.DATE + 'T00:00:00Z', ethereum: {circulation: '100'}, base: {circulation: '2'}})
               }
               if (url.pathname === '/api/v1/stats/daily') {
@@ -126,6 +127,18 @@ for (const mode of [
     `)
       .bind(FIRST_CIRCULATION_DATE, shiftDate(yesterday, -1))
       .run()
+    if (mode === 'old-snapshot-404') {
+      await db
+        .prepare(
+          "INSERT INTO circulation_daily VALUES (?, 100, 2, NULL, NULL, 'api')",
+        )
+        .bind(yesterday)
+        .run()
+      await db
+        .prepare('DELETE FROM circulation_daily WHERE date = ?')
+        .bind(shiftDate(yesterday, -1))
+        .run()
+    }
     await db
       .prepare(
         "INSERT INTO cloud_daily VALUES (?, 90, 10, 5, 20, 1, 12000, 'archive')",
@@ -149,6 +162,34 @@ for (const mode of [
     const checkpoint = await db
       .prepare("SELECT value FROM sync_state WHERE key = 'vault_block'")
       .first<string>('value')
+    if (mode === 'old-snapshot-404') {
+      assert.equal(
+        result.outcome,
+        'exception',
+        'An older snapshot 404 fails the scheduled run',
+      )
+      assert.equal(
+        checkpoint,
+        String(lastBlock),
+        'Other streams still complete',
+      )
+      assert.equal(
+        await db
+          .prepare('SELECT date FROM circulation_daily WHERE date = ?')
+          .bind(shiftDate(yesterday, -1))
+          .first(),
+        null,
+      )
+      const snapshotCalls = calls
+        .map((value) => new URL(String(record(value).url)))
+        .filter((url) => url.pathname === '/api/snapshot')
+      assert.equal(snapshotCalls.length, 1)
+      assert.equal(
+        snapshotCalls[0]?.searchParams.get('date'),
+        shiftDate(yesterday, -1),
+      )
+      continue
+    }
     const failed = !['ok', 'snapshot-404'].includes(mode)
     assert.equal(
       result.outcome,

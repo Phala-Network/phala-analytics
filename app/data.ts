@@ -214,7 +214,7 @@ export const halveChunk = (size: number) => {
   return Math.max(1, Math.floor(size / 2))
 }
 
-// Scan holes rather than MAX(date): an imported tail must not hide earlier gaps.
+// Fill recent holes first for freshness, then work back through older gaps.
 export const MISSING_CIRCULATION_SQL = `
   WITH RECURSIVE dates(date) AS (
     SELECT ?1 WHERE ?1 <= ?2
@@ -222,7 +222,7 @@ export const MISSING_CIRCULATION_SQL = `
   )
   SELECT dates.date FROM dates
   LEFT JOIN circulation_daily USING (date)
-  WHERE circulation_daily.date IS NULL ORDER BY dates.date LIMIT 20
+  WHERE circulation_daily.date IS NULL ORDER BY dates.date DESC LIMIT 20
 `
 
 // Window ordering also resolves multiple settlements in the same block.

@@ -104,7 +104,7 @@ test('circulation parsing retains nullable chains and uses the upstream realtime
   expect(() => utcDate('2026-02-30')).toThrow()
 })
 
-test('missing-date SQL scans holes before an imported tail and limits each run to 20', () => {
+test('missing-date SQL fills newest gaps first, limits runs to 20, and respects the history start', () => {
   const db = new Database(':memory:')
   try {
     db.exec(schema)
@@ -113,14 +113,24 @@ test('missing-date SQL scans holes before an imported tail and limits each run t
       [FIRST_CIRCULATION_DATE],
     )
     db.run(
-      "INSERT INTO circulation_daily VALUES ('2026-10-26', 1, NULL, NULL, NULL, 'archive')",
+      "INSERT INTO circulation_daily VALUES ('2026-09-23', 1, NULL, NULL, NULL, 'archive')",
     )
     const rows = db
       .query<{date: string}, [string, string]>(MISSING_CIRCULATION_SQL)
       .all(FIRST_CIRCULATION_DATE, '2026-10-26')
     expect(rows).toHaveLength(20)
-    expect(rows[0]?.date).toBe(shiftDate(FIRST_CIRCULATION_DATE))
-    expect(rows.at(-1)?.date).toBe(shiftDate(FIRST_CIRCULATION_DATE, 20))
+    expect(rows.map((row) => row.date)).toEqual(
+      Array.from({length: 20}, (_, index) => shiftDate('2026-10-26', -index)),
+    )
+    expect(
+      db
+        .query(MISSING_CIRCULATION_SQL)
+        .all(FIRST_CIRCULATION_DATE, shiftDate(FIRST_CIRCULATION_DATE, 3)),
+    ).toEqual([
+      {date: shiftDate(FIRST_CIRCULATION_DATE, 3)},
+      {date: shiftDate(FIRST_CIRCULATION_DATE, 2)},
+      {date: shiftDate(FIRST_CIRCULATION_DATE)},
+    ])
     expect(
       db.query(MISSING_CIRCULATION_SQL).all('2026-10-27', '2026-10-26'),
     ).toEqual([])
