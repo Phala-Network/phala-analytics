@@ -1,5 +1,5 @@
 import {type AnalyticsData, DAY_MS, realtimeRow, VAULT_DAILY_SQL} from './data'
-import {PAGE} from './page'
+import {ASSETS, UPLOT_SCRIPT, UPLOT_STYLE} from './page'
 import {sync} from './sync'
 
 export const analyticsData = async (
@@ -35,6 +35,21 @@ export const analyticsData = async (
       backfilled: source === 'api-backfill',
     })) as AnalyticsData['cloud'],
   }
+}
+
+const PAGE_HEADERS = {
+  'Content-Security-Policy': [
+    "default-src 'none'",
+    `script-src 'self' ${UPLOT_SCRIPT}`,
+    `style-src 'self' ${UPLOT_STYLE}`,
+    "connect-src 'self'",
+    "img-src 'self'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'none'",
+  ].join('; '),
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
 }
 
 const health = async (db: D1Database, now: Date) => {
@@ -84,14 +99,13 @@ export const fetchHandler = async (
   const path = new URL(request.url).pathname
   let response: Response
   try {
-    if (path === '/') {
-      response = new Response(PAGE, {
+    const asset = ASSETS[path]
+    if (asset) {
+      response = new Response(asset.body, {
         headers: {
-          'Content-Type': 'text/html; charset=utf-8',
+          ...PAGE_HEADERS,
+          'Content-Type': asset.type,
           'Cache-Control': 'public, max-age=300',
-          'Content-Security-Policy':
-            "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
-          'X-Content-Type-Options': 'nosniff',
         },
       })
     } else if (path === '/api/data') {

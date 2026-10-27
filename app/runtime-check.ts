@@ -236,6 +236,20 @@ for (const mode of [
     assert.equal(page.status, 200)
     assert.ok(page.headers.has('Content-Security-Policy'))
     assert.ok((await page.text()).includes('Phala Analytics'))
+    assert.match(
+      page.headers.get('Content-Security-Policy') ?? '',
+      /script-src 'self' https:\/\/cdn\.jsdelivr\.net\/npm\/uplot@1\.6\.32\//,
+    )
+    for (const [path, type] of [
+      ['/app.js', 'text/javascript; charset=utf-8'],
+      ['/app.css', 'text/css; charset=utf-8'],
+      ['/favicon.svg', 'image/svg+xml'],
+    ]) {
+      const asset = await worker.fetch(`https://analytics.test${path}`)
+      assert.equal(asset.status, 200)
+      assert.equal(asset.headers.get('Content-Type'), type)
+      assert.ok((await asset.text()).length > 0)
+    }
     for (const path of ['/', '/api/data', '/api/health']) {
       const head = await worker.fetch(`https://analytics.test${path}`, {
         method: 'HEAD',
