@@ -13,7 +13,13 @@ export default defineConfig(({mode}) => ({
         dev: mode === 'manual' ? {remote: true} : undefined,
       }),
       PHALA_CLOUD_API_KEY: bindings.secret(),
-      ETHEREUM_RPC_URL: bindings.secret(),
+      BACKUP: bindings.r2({name: 'phala-analytics-backup'}),
+      GOLDSKY_ETHEREUM_URL: bindings.text(
+        'https://api.goldsky.com/api/public/project_cmdgxxcewrqdi01wx9e7md0ek/subgraphs/phala-ethereum/prod/gn',
+      ),
+      GOLDSKY_BASE_URL: bindings.text(
+        'https://api.goldsky.com/api/public/project_cmdgxxcewrqdi01wx9e7md0ek/subgraphs/phala-base/prod/gn',
+      ),
       CIRCULATION_API_URL: bindings.text(
         'https://pha-circulation-server.vercel.app',
       ),

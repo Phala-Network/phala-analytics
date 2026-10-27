@@ -1,6 +1,6 @@
 import {mkdir, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
-import {cloudRow, finiteNumber, nullableNumber, record, utcDate} from '../data'
+import {cloudRow, nullableNumber, record, utcDate} from '../data'
 
 export interface BatchQuery {
   sql: string
@@ -23,8 +23,6 @@ const archivedCirculation = (value: unknown) => {
     throw new Error('Missing archive timestamp')
   return {
     date: utcDate(row.updated_time.slice(0, 10)),
-    ethereum: finiteNumber(row.ethereum_circulation),
-    base: nullableNumber(row.base_circulation),
     phala: nullableNumber(row.phala_circulation),
     khala: nullableNumber(row.khala_circulation),
   }
@@ -49,21 +47,17 @@ const insertQueries = (
 
 export const seedQueries = (ndjson: string, exported: unknown) => {
   const circulation = new Map<string, ReturnType<typeof archivedCirculation>>()
-  let overlaps = 0
   const addCirculation = (value: unknown) => {
     const row = archivedCirculation(value)
     const previous = circulation.get(row.date)
     if (previous != null) {
       if (JSON.stringify(previous) !== JSON.stringify(row))
         throw new Error(`Circulation archives disagree: ${row.date}`)
-      overlaps++
     } else circulation.set(row.date, row)
   }
   for (const line of ndjson.split('\n')) {
     if (line.trim()) addCirculation(JSON.parse(line))
   }
-  for (const row of exportRows(exported, '3572546')) addCirculation(row)
-  if (overlaps === 0) throw new Error('No circulation overlap to verify')
   const cloud = new Map<string, (string | number | null)[]>()
   for (const archived of exportRows(exported, '4614059')) {
     // Public Dune exports also include a counter-only row, without a date.
@@ -79,6 +73,8 @@ export const seedQueries = (ndjson: string, exported: unknown) => {
       row.total_vms,
       row.running_vms,
       row.total_vcpu,
+      null,
+      null,
       nullableNumber(archived.price),
       nullableNumber(archived.captured),
       'archive',
@@ -91,20 +87,12 @@ export const seedQueries = (ndjson: string, exported: unknown) => {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, row]) => row)
   return {
-    overlaps,
     circulationCount: circulation.size,
     cloudCount: cloud.size,
     circulation: insertQueries(
-      'circulation_daily',
-      ['date', 'ethereum', 'base', 'phala', 'khala', 'source'],
-      circulationRows.map((row) => [
-        row.date,
-        row.ethereum,
-        row.base,
-        row.phala,
-        row.khala,
-        'archive',
-      ]),
+      'legacy_circulation_day',
+      ['date', 'phala', 'khala'],
+      circulationRows.map((row) => [row.date, row.phala, row.khala]),
     ),
     cloud: insertQueries(
       'cloud_daily',
@@ -114,6 +102,8 @@ export const seedQueries = (ndjson: string, exported: unknown) => {
         'total_vms',
         'running_vms',
         'total_vcpu',
+        'running_vcpu',
+        'active_users',
         'pha_usd',
         'captured',
         'source',
@@ -146,7 +136,7 @@ const main = async () => {
     }
   }
   console.log(
-    `Seed: ${queries.circulationCount} circulation days, ${queries.cloudCount} cloud days; ${queries.overlaps} matching circulation overlaps`,
+    `Seed: ${queries.circulationCount} legacy circulation days, ${queries.cloudCount} cloud days`,
   )
 }
 

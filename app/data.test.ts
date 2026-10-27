@@ -1,27 +1,23 @@
-import {Database} from 'bun:sqlite'
 import {expect, test} from 'bun:test'
 import {
   captured,
   cloudSource,
   cloudWindow,
   dailyPrices,
-  decodeSettlement,
-  FIRST_CIRCULATION_DATE,
-  halveChunk,
-  MISSING_CIRCULATION_SQL,
   realtimeRow,
   selectCloudRows,
-  shiftDate,
-  snapshotRow,
   utcDate,
-  VAULT_DAILY_SQL,
 } from './data'
-import {dailyCloud, settlementLog} from './fixtures'
+import {chainDay, claimDay, dailyCloud, vaultDay} from './fixtures'
 import {seedQueries} from './scripts/seed'
-
-const schema = await Bun.file(
-  `${import.meta.dir}/migrations/0001_init.sql`,
-).text()
+import {
+  CHAIN_FIELDS,
+  CLAIM_FIELDS,
+  parseDay,
+  parsePage,
+  VAULT_FIELDS,
+  wei,
+} from './subgraph'
 
 test('cloud window catches up through yesterday and is capped at 90 days', () => {
   expect(cloudWindow('2026-10-25', '2026-10-26')).toBe(2)
@@ -79,121 +75,62 @@ test('price averages use UTC boundaries, with invalid points rejected', () => {
   expect(() => dailyPrices({prices: [[0, 0]]})).toThrow()
 })
 
-test('circulation parsing retains nullable chains and uses the upstream realtime total', () => {
-  expect(
-    snapshotRow({ethereum: {circulation: '100.1'}, base: null}, '2026-10-26'),
-  ).toEqual({
-    date: '2026-10-26',
-    ethereum: 100.1,
-    base: null,
-    phala: null,
-    khala: null,
-  })
-  expect(
-    realtimeRow({
-      totalCirculation: '102.1',
-      ethereum: {timestamp: '2026-10-27T00:01:00Z'},
-    }),
-  ).toEqual({totalCirculation: 102.1, timestamp: '2026-10-27T00:01:00.000Z'})
+test('subgraph days convert wei, retain false implementation flags and separate flow dates', () => {
+  const chain = parseDay(
+    {...chainDay('2026-10-27'), vaultImplementationReviewed: false},
+    CHAIN_FIELDS,
+  )
+  expect(chain.circulation).toBe(100)
+  expect(chain.vaultReward).toBe(-1)
+  expect(chain.vaultImplementationReviewed).toBe(false)
+  const vault = parseDay(
+    {...vaultDay('2026-10-27'), settlementTotalAssets: null},
+    VAULT_FIELDS,
+  )
+  expect(vault.flowDate).toBe('2026-10-26')
+  expect(vault.totalAssets).toBe(100)
+  expect(vault.settlementTotalAssets).toBeNull()
+  expect(vault.apr).toBe(0.05)
+  expect(vault.sharePrice).toBe(1.25)
+  expect(parseDay(claimDay('2026-10-27'), CLAIM_FIELDS).khalaFree).toBe(4)
+  for (const value of ['1.1', 1, 'Infinity']) expect(() => wei(value)).toThrow()
   expect(() =>
-    snapshotRow(
-      {date: '2026-10-25T00:00:00Z', ethereum: {circulation: '1'}},
-      '2026-10-26',
-    ),
+    parseDay({...vaultDay('2026-10-27'), stakers: '0.1'}, VAULT_FIELDS),
+  ).toThrow()
+  expect(() =>
+    parseDay({...vaultDay('2026-10-27'), flowDate: '2026-10-27'}, VAULT_FIELDS),
   ).toThrow()
   expect(() => utcDate('2026-02-30')).toThrow()
+  expect(
+    realtimeRow({
+      totalCirculation: '102',
+      ethereum: {timestamp: '2026-10-27T00:00:00Z'},
+    }).totalCirculation,
+  ).toBe(102)
 })
 
-test('missing-date SQL fills newest gaps first, limits runs to 20, and respects the history start', () => {
-  const db = new Database(':memory:')
-  try {
-    db.exec(schema)
-    db.run(
-      "INSERT INTO circulation_daily VALUES (?, 1, NULL, NULL, NULL, 'archive')",
-      [FIRST_CIRCULATION_DATE],
-    )
-    db.run(
-      "INSERT INTO circulation_daily VALUES ('2026-09-23', 1, NULL, NULL, NULL, 'archive')",
-    )
-    const rows = db
-      .query<{date: string}, [string, string]>(MISSING_CIRCULATION_SQL)
-      .all(FIRST_CIRCULATION_DATE, '2026-10-26')
-    expect(rows).toHaveLength(20)
-    expect(rows.map((row) => row.date)).toEqual(
-      Array.from({length: 20}, (_, index) => shiftDate('2026-10-26', -index)),
-    )
-    expect(
-      db
-        .query(MISSING_CIRCULATION_SQL)
-        .all(FIRST_CIRCULATION_DATE, shiftDate(FIRST_CIRCULATION_DATE, 3)),
-    ).toEqual([
-      {date: shiftDate(FIRST_CIRCULATION_DATE, 3)},
-      {date: shiftDate(FIRST_CIRCULATION_DATE, 2)},
-      {date: shiftDate(FIRST_CIRCULATION_DATE)},
-    ])
-    expect(
-      db.query(MISSING_CIRCULATION_SQL).all('2026-10-27', '2026-10-26'),
-    ).toEqual([])
-  } finally {
-    db.close()
-  }
+test('subgraph pages require strict deterministic date ordering after the checkpoint', () => {
+  const rows = [chainDay('2026-10-26'), chainDay('2026-10-27')]
+  expect(parsePage(rows, CHAIN_FIELDS, '2026-10-25')).toHaveLength(2)
+  for (const invalid of [
+    [rows[1], rows[0]],
+    [rows[0], rows[0]],
+    Array(1001).fill(rows[0]),
+  ])
+    expect(() => parsePage(invalid, CHAIN_FIELDS, '')).toThrow()
+  expect(() => parsePage(rows, CHAIN_FIELDS, '2026-10-26')).toThrow()
 })
 
-test('vault decodes ABI words and SQL sums rewards and selects last assets across UTC days', () => {
-  const db = new Database(':memory:')
-  try {
-    db.exec(schema)
-    const time = Date.parse('2026-10-25T23:59:59Z') / 1000
-    const logs = [
-      settlementLog(time, 2n * 10n ** 18n, 100n * 10n ** 18n, 21_596_326),
-      settlementLog(time, 3n * 10n ** 18n, 101n * 10n ** 18n, 21_596_326, 1),
-      settlementLog(time + 1, 4n * 10n ** 18n, 102n * 10n ** 18n, 21_596_327),
-    ]
-    for (const log of logs.reverse()) {
-      const row = decodeSettlement(log)
-      db.run('INSERT INTO vault_settlements VALUES (?, ?, ?, ?, ?)', [
-        row.block_number,
-        row.log_index,
-        row.settled_at,
-        row.rewards,
-        row.total_assets,
-      ])
-    }
-    expect(db.query(VAULT_DAILY_SQL).all()).toEqual([
-      {date: '2026-10-25', dailyRewards: 5, totalAssets: 101},
-      {date: '2026-10-26', dailyRewards: 4, totalAssets: 102},
-    ])
-    expect(() =>
-      decodeSettlement({...settlementLog(time), removed: true}),
-    ).toThrow()
-    expect(() =>
-      decodeSettlement({...settlementLog(time), data: '0x00'}),
-    ).toThrow()
-    expect(() =>
-      decodeSettlement({...settlementLog(time), address: '0x00'}),
-    ).toThrow()
-  } finally {
-    db.close()
-  }
-})
-
-test('chunk halving reaches one block and never retries a rejected single block', () => {
-  expect(halveChunk(10_000)).toBe(5000)
-  expect(halveChunk(3)).toBe(1)
-  expect(() => halveChunk(1)).toThrow('single block')
-})
-
-test('seed validates archive overlap and uses parameterized inserts below the D1 limit', () => {
+test('seed includes only frozen legacy circulation and original Cloud rows', () => {
   const row = {
     updated_time: '2025-10-01T00:00:00Z',
     ethereum_circulation: 100,
     base_circulation: 2,
-    phala_circulation: null,
+    phala_circulation: 3,
     khala_circulation: null,
   }
   const archive = {
     results: {
-      '3572546': {rows: [row]},
       '4614059': {
         rows: [
           {...dailyCloud('2026-09-22'), captured: 123},
@@ -203,9 +140,10 @@ test('seed validates archive overlap and uses parameterized inserts below the D1
     },
   }
   const seed = seedQueries(`${JSON.stringify(row)}\n`, archive)
-  expect(seed.overlaps).toBe(1)
   expect(seed.circulationCount).toBe(1)
   expect(seed.cloudCount).toBe(1)
+  expect(seed.circulation[0]?.params).toEqual(['2025-10-01', 3, null])
+  expect(seed.circulation[0]?.sql).toContain('legacy_circulation_day')
   expect(seed.cloud[0]?.params).toEqual([
     '2026-09-22',
     100,
@@ -213,12 +151,20 @@ test('seed validates archive overlap and uses parameterized inserts below the D1
     10,
     40,
     null,
+    null,
+    null,
     123,
     'archive',
   ])
   for (const query of [...seed.cloud, ...seed.circulation])
     expect(query.params.length).toBeLessThanOrEqual(100)
   expect(() =>
-    seedQueries(JSON.stringify({...row, ethereum_circulation: 101}), archive),
+    seedQueries(
+      `${JSON.stringify(row)}\n${JSON.stringify({...row, phala_circulation: 4})}`,
+      archive,
+    ),
   ).toThrow('disagree')
+  expect(() =>
+    seedQueries('', {results: {'4614059': {rows: [dailyCloud('2026-09-23')]}}}),
+  ).toThrow('cutoff')
 })

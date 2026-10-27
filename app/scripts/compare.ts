@@ -1,40 +1,100 @@
 import assert from 'node:assert/strict'
 import {finiteNumber, record, utcDate} from '../data'
+import {
+  CHAINS,
+  dayQuery,
+  ENTITIES,
+  graphql,
+  META_QUERY,
+  PAGE_SIZE,
+  parsePage,
+  subgraphMeta,
+} from '../subgraph'
 import {exportRows} from './seed'
 
-const datedRows = (value: unknown, field: string) => {
+const datedRows = (value: unknown) => {
   if (!Array.isArray(value)) throw new Error('Expected dated rows')
   const result = new Map<string, Record<string, unknown>>()
   for (const valueRow of value) {
     const row = record(valueRow)
-    const date = utcDate(row[field])
+    const date = utcDate(row.date)
     if (result.has(date)) throw new Error(`Duplicate date ${date}`)
     result.set(date, row)
   }
   return result
 }
+const equalTotal = (actual: unknown, expected: unknown, label: string) => {
+  const left = finiteNumber(actual)
+  const right = finiteNumber(expected)
+  assert.ok(
+    Math.abs(left - right) / Math.max(1, Math.abs(right)) <= 1e-9,
+    `${label} differs`,
+  )
+}
 
 export const compare = (
   value: unknown,
+  expectedValue: unknown,
   exported: unknown,
-  skipVault = false,
 ): string[] => {
   const data = record(value)
-  const circulation = datedRows(data.circulation, 'date')
-  const history = exportRows(exported, '3572546')
-  assert.equal(history.length, 365, 'Expected all 365 History rows')
-  for (const expected of history) {
-    assert.equal(typeof expected.updated_time, 'string')
-    const date = String(expected.updated_time).slice(0, 10)
-    const actual = circulation.get(date)
-    assert.ok(actual, `Circulation missing ${date}`)
-    const total = finiteNumber(expected.total_circulation)
-    assert.ok(
-      Math.abs(finiteNumber(actual.total) - total) / Math.max(1, total) <= 1e-9,
-      `Circulation differs ${date}`,
+  const expected = record(expectedValue)
+  assert.ok(Array.isArray(data.chainCirculation))
+  assert.ok(Array.isArray(expected.chainCirculation))
+  for (const chain of CHAINS) {
+    const actualRows = datedRows(
+      data.chainCirculation.filter((row) => record(row).chain === chain),
+    )
+    const expectedRows = datedRows(
+      expected.chainCirculation.filter((row) => record(row).chain === chain),
+    )
+    assert.ok(expectedRows.size > 0, `${chain} subgraph has no daily rows`)
+    assert.equal(actualRows.size, expectedRows.size, `${chain} row count`)
+    for (const date of expectedRows.keys())
+      assert.ok(actualRows.has(date), `${chain} missing ${date}`)
+    const date = [...expectedRows.keys()].sort().at(-1)
+    assert.ok(date)
+    equalTotal(
+      actualRows.get(date)?.circulation,
+      expectedRows.get(date)?.circulation,
+      `${chain} latest circulation`,
+    )
+    assert.equal(
+      record(record(data.subgraphs)[chain]).deployment,
+      record(record(expected.subgraphs)[chain]).deployment,
+      `${chain} deployment`,
     )
   }
-  const cloud = datedRows(data.cloud, 'date')
+  for (const [name, totals] of [
+    ['vault', ['totalAssets', 'settlementTotalAssets', 'dailyRewards']],
+    [
+      'claims',
+      [
+        'khalaClaimCount',
+        'phalaClaimCount',
+        'khalaFree',
+        'khalaStaked',
+        'phalaFree',
+        'phalaStaked',
+      ],
+    ],
+  ] as const) {
+    const actualRows = datedRows(data[name])
+    const expectedRows = datedRows(expected[name])
+    assert.ok(expectedRows.size > 0, `${name} subgraph has no daily rows`)
+    assert.equal(actualRows.size, expectedRows.size, `${name} row count`)
+    for (const date of expectedRows.keys())
+      assert.ok(actualRows.has(date), `${name} missing ${date}`)
+    const date = [...expectedRows.keys()].sort().at(-1)
+    assert.ok(date)
+    for (const field of totals) {
+      const actual: unknown = actualRows.get(date)?.[field]
+      const expected: unknown = expectedRows.get(date)?.[field]
+      if (expected == null) assert.equal(actual, null, `${name} ${field}`)
+      else equalTotal(actual, expected, `${name} ${field}`)
+    }
+  }
+  const cloud = datedRows(data.cloud)
   const expectedCloud = exportRows(exported, '4614059').filter(
     (row) => row.date != null,
   )
@@ -56,63 +116,73 @@ export const compare = (
         expected[archive] ?? null,
         `Cloud ${api} differs ${date}`,
       )
+    assert.equal(actual.runningVcpu, null, `Archive runningVcpu ${date}`)
+    assert.equal(actual.activeUsers, null, `Archive activeUsers ${date}`)
+    assert.equal(actual.backfilled, false, `Archive provenance ${date}`)
   }
   assert.equal(
     [...cloud.keys()].filter((date) => date <= '2026-09-22').length,
     663,
     'Extra Cloud archive dates',
   )
-  const messages = [
-    'Circulation: all 365 History totals match (relative tolerance 1e-9)',
+  return [
+    'Subgraphs: row counts, dates, deployments and latest totals match (relative tolerance 1e-9)',
     'Cloud: all 663 archive rows match exactly, including captured',
   ]
-  if (skipVault) {
-    messages.push(
-      'Vault: SKIPPED (requires independently scanned Ethereum history)',
-    )
-  } else {
-    const vault = datedRows(data.vault, 'date')
-    const expectedVault = exportRows(exported, '5154700').filter(
-      (row) => row.day != null,
-    )
-    assert.equal(expectedVault.length, 550, 'Expected all 550 Vault dates')
-    for (const expected of expectedVault) {
-      const date = utcDate(expected.day)
-      const actual = vault.get(date)
-      assert.ok(actual, `Vault missing ${date}`)
-      assert.equal(
-        actual.totalAssets,
-        expected.totalAssets,
-        `Vault assets differ ${date}`,
-      )
-    }
-    assert.equal(
-      [...vault.keys()].filter((date) => date <= '2026-10-10').length,
-      550,
-      'Extra Vault dates through export cutoff',
-    )
-    assert.equal(
-      vault.get('2026-10-10')?.dailyRewards,
-      34930.0634765625,
-      'Vault rewards differ 2026-10-10',
-    )
-    messages.push(
-      'Vault: all 550 assets match exactly; no extra days through 2026-10-10; final dailyRewards match',
-    )
+}
+
+export const subgraphSnapshot = async (
+  urls: Record<(typeof CHAINS)[number], string>,
+) => {
+  const snapshot: {
+    chainCirculation: unknown[]
+    vault: unknown[]
+    claims: unknown[]
+    subgraphs: Record<string, {deployment: string}>
+  } = {
+    chainCirculation: [],
+    vault: [],
+    claims: [],
+    subgraphs: {},
   }
-  return messages
+  for (const chain of CHAINS) {
+    const url = urls[chain]
+    const meta = await graphql(url, META_QUERY, {})
+    assert.equal(record(meta.latest).chain, chain, 'Subgraph chain mismatch')
+    const deployment = subgraphMeta(meta)
+    snapshot.subgraphs[chain] = {deployment}
+    for (const {entity, spec, table} of ENTITIES) {
+      if (chain === 'base' && table !== 'circulation_day') continue
+      let after = ''
+      while (true) {
+        const data = await graphql(url, dayQuery(entity, spec), {after})
+        assert.equal(
+          subgraphMeta(data),
+          deployment,
+          'Subgraph changed during comparison; retry',
+        )
+        const rows = parsePage(data.rows, spec, after)
+        if (table === 'circulation_day')
+          snapshot.chainCirculation.push(
+            ...rows.map((row) => ({...row, chain})),
+          )
+        else if (table === 'vault_day') snapshot.vault.push(...rows)
+        else snapshot.claims.push(...rows)
+        if (rows.length < PAGE_SIZE) break
+        const last = rows.at(-1)
+        assert.ok(last)
+        after = last.date
+      }
+    }
+  }
+  return snapshot
 }
 
 const main = async () => {
-  const [input, resultsPath, ...flags] = Bun.argv.slice(2)
-  if (
-    !input ||
-    !resultsPath ||
-    flags.some((flag) => flag !== '--skip-vault') ||
-    flags.length > 1
-  )
+  const [input, resultsPath, ethereum, base, ...rest] = Bun.argv.slice(2)
+  if (!input || !resultsPath || !ethereum || !base || rest.length)
     throw new Error(
-      'Usage: bun scripts/compare.ts <api-data.json|api-data-url> <results.json> [--skip-vault]',
+      'Usage: bun scripts/compare.ts <api-data.json|api-data-url> <results.json> <ethereum-subgraph-url> <base-subgraph-url>',
     )
   let data: unknown
   if (/^https?:\/\//.test(input)) {
@@ -123,17 +193,17 @@ const main = async () => {
     if (!response.ok) throw new Error(`Analytics data: HTTP ${response.status}`)
     data = await response.json()
   } else data = JSON.parse(await Bun.file(input).text())
+  const expected = await subgraphSnapshot({ethereum, base})
   for (const message of compare(
     data,
+    expected,
     JSON.parse(await Bun.file(resultsPath).text()),
-    flags.includes('--skip-vault'),
   ))
     console.log(message)
 }
 
-if (import.meta.main) {
+if (import.meta.main)
   main().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : 'Comparison failed')
     process.exitCode = 1
   })
-}

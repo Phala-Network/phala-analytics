@@ -1,37 +1,40 @@
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
-import {URL as NodeURL} from 'node:url'
 import {convertV4MiniflareOptions, Miniflare} from 'miniflare'
-import {
-  FIRST_CIRCULATION_DATE,
-  record,
-  shiftDate,
-  VAULT_DEPLOY_BLOCK,
-} from './data'
-import {dailyCloud, settlementLog} from './fixtures'
+import {record, shiftDate} from './data'
+import {chainDay, claimDay, dailyCloud, vaultDay} from './fixtures'
+import {CHAIN_FIELDS, fields, parseDay} from './subgraph'
 
 // Miniflare's undici dispatcher needs Node rather than Bun's fetch implementation.
 const script = readFileSync(0, 'utf8')
-const schema = readFileSync(
-  new NodeURL('../migrations/0001_init.sql', import.meta.url),
-  'utf8',
-)
+const schemaPath = process.argv[2]
+if (!schemaPath) throw new Error('Missing migration path')
+const schema = readFileSync(schemaPath, 'utf8')
 const today = new Date().toISOString().slice(0, 10)
 const yesterday = shiftDate(today, -1)
 const scheduledTime = new Date(`${today}T08:00:00Z`)
-const settledAt = Date.parse(`${yesterday}T12:00:00Z`) / 1000
-const lastBlock = VAULT_DEPLOY_BLOCK + 100
+const token = (amount: number) => String(BigInt(amount) * 10n ** 18n)
 
 for (const mode of [
   'ok',
+  'pagination',
   'redirect',
   'server',
-  'log-redirect',
-  'log-server',
+  'page-redirect',
+  'page-server',
+  'graphql-errors',
+  'indexing-errors',
+  'changed-mid-page',
   'write-fail',
-  'snapshot-404',
-  'old-snapshot-404',
+  'invalid-page',
+  'unreviewed',
 ]) {
+  const ethereum =
+    mode === 'pagination'
+      ? Array.from({length: 1001}, (_, i) =>
+          chainDay(shiftDate(today, i - 1000)),
+        )
+      : [chainDay(yesterday), chainDay(today)]
   const runtime = new Miniflare(
     convertV4MiniflareOptions({
       cf: false,
@@ -42,10 +45,12 @@ for (const mode of [
           script,
           compatibilityDate: '2026-10-23',
           d1Databases: {DB: 'analytics-test'},
+          r2Buckets: {BACKUP: 'backup-test'},
           bindings: {
             PHALA_CLOUD_API_KEY: 'test-cloud-key',
-            ETHEREUM_RPC_URL: 'https://rpc.test',
             CIRCULATION_API_URL: 'https://circulation.test',
+            GOLDSKY_ETHEREUM_URL: 'https://ethereum.test',
+            GOLDSKY_BASE_URL: 'https://base.test',
           },
           outboundService: 'upstream-stubs',
         },
@@ -55,205 +60,173 @@ for (const mode of [
           compatibilityDate: '2026-10-23',
           bindings: {
             MODE: mode,
-            CLOUD: dailyCloud(yesterday),
-            PREVIOUS_CLOUD: dailyCloud(shiftDate(yesterday, -1)),
-            DATE: yesterday,
-            NOW: `${today}T07:00:00Z`,
-            HEAD: lastBlock + 12,
-            LOG: settlementLog(settledAt),
+            CLOUD: [
+              dailyCloud(shiftDate(yesterday, -1)),
+              dailyCloud(yesterday),
+            ],
+            DATE: today,
+            ETHEREUM: ethereum,
+            BASE: [chainDay(yesterday, 'base'), chainDay(today, 'base')],
+            VAULT: [vaultDay(yesterday), vaultDay(today)],
+            CLAIM: [claimDay(yesterday), claimDay(today)],
           },
           script: `
-          const calls = []
-          export default {
-            async fetch(request, env) {
-              const url = new URL(request.url)
-              if (url.hostname === 'control.test') return Response.json(calls)
-              const body = await request.text()
-              calls.push({url: request.url, body})
-              const failure = (status) => new Response('Upstream failed', {
-                status, headers: {Location: 'https://not-followed.test/'},
-              })
-              if (env.MODE === 'redirect') return failure(302)
-              if (env.MODE === 'server') return failure(503)
-              if (url.pathname === '/api/all') return Response.json({
-                totalCirculation: '102', ethereum: {timestamp: env.NOW},
-              })
-              if (url.pathname === '/api/snapshot') {
-                if (env.MODE === 'snapshot-404' || env.MODE === 'old-snapshot-404') return failure(404)
-                return Response.json({date: env.DATE + 'T00:00:00Z', ethereum: {circulation: '100'}, base: {circulation: '2'}})
-              }
-              if (url.pathname === '/api/v1/stats/daily') {
-                if (request.headers.get('Authorization') !== 'Bearer test-cloud-key') return failure(401)
-                return Response.json({data: [env.CLOUD, env.PREVIOUS_CLOUD]})
-              }
-              if (url.pathname.endsWith('/market_chart/range')) return Response.json({prices: [
-                [Date.parse(env.PREVIOUS_CLOUD.date + 'T00:00:00Z'), 2],
-                [Date.parse(env.DATE + 'T00:00:00Z'), 1],
-                [Date.parse(env.DATE + 'T23:00:00Z'), 3],
-              ]})
-              if (url.hostname === 'rpc.test') {
-                const rpc = JSON.parse(body)
-                const reply = (result) => Response.json({jsonrpc: '2.0', id: rpc.id, result})
-                if (rpc.method === 'eth_blockNumber') return reply('0x' + env.HEAD.toString(16))
-                if (rpc.method === 'eth_getLogs') {
-                  if (env.MODE === 'log-redirect') return failure(302)
-                  if (env.MODE === 'log-server') return failure(503)
-                  const {fromBlock, toBlock} = rpc.params[0]
-                  if (Number(toBlock) - Number(fromBlock) + 1 > 16) return Response.json({
-                    jsonrpc: '2.0', id: rpc.id, error: {code: -32005, message: 'block range too large'},
-                  })
-                  const block = Number(env.LOG.blockNumber)
-                  return reply(block >= Number(fromBlock) && block <= Number(toBlock) ? [env.LOG] : [])
-                }
-              }
-              return failure(500)
-            },
+        const calls = []
+        let generation = 0
+        export default {async fetch(request, env) {
+          const url = new URL(request.url)
+          if (url.hostname === 'control.test') {
+            if (request.method === 'POST') generation++
+            return Response.json(calls)
           }
-        `,
+          const body = await request.text()
+          calls.push({url: request.url, body})
+          const failure = (status) => new Response('Upstream failed', {status, headers: {Location: 'https://not-followed.test/'}})
+          if (env.MODE === 'redirect') return failure(302)
+          if (env.MODE === 'server') return failure(503)
+          if (url.pathname === '/api/all') return Response.json({totalCirculation: '109', ethereum: {timestamp: env.DATE + 'T07:00:00Z'}})
+          if (url.pathname === '/api/v1/stats/daily') {
+            if (request.headers.get('Authorization') !== 'Bearer test-cloud-key') return failure(401)
+            return Response.json({data: env.CLOUD})
+          }
+          if (url.pathname.endsWith('/market_chart/range')) return Response.json({prices: env.CLOUD.flatMap((row) => [
+            [Date.parse(row.date + 'T00:00:00Z'), 1], [Date.parse(row.date + 'T23:00:00Z'), 3],
+          ])})
+          const chain = url.hostname === 'ethereum.test' ? 'ethereum' : 'base'
+          const {query, variables} = JSON.parse(body)
+          if (env.MODE === 'graphql-errors') return Response.json({errors: [{message: 'not leaked'}]})
+          const changed = generation > 0 && chain === 'ethereum'
+          const _meta = {deployment: chain + (changed ? '-v2' : '-v1'), hasIndexingErrors: env.MODE === 'indexing-errors'}
+          if (query.includes('latest(')) return Response.json({data: {_meta, latest: {
+            chain, timestamp: String(Date.parse(env.DATE + 'T07:00:00Z') / 1000),
+            vaultImplementation: '0x' + '1'.repeat(40), vaultImplementationReviewed: env.MODE !== 'unreviewed',
+            accrualMode: env.MODE === 'unreviewed' ? 'checkpoint-only' : 'formula',
+          }}})
+          if (env.MODE === 'page-redirect') return failure(302)
+          if (env.MODE === 'page-server') return failure(503)
+          if (!query.includes('first: 1000') || !query.includes('orderBy: date') || !query.includes('orderDirection: asc') || !query.includes('date_gt: $after')) return failure(400)
+          let rows = query.includes('chainDays(') ? (chain === 'ethereum' ? env.ETHEREUM : env.BASE)
+            : query.includes('vaultDays(') ? env.VAULT : env.CLAIM
+          rows = rows.filter((row) => row.date > variables.after && (!changed || row.date === env.DATE)).slice(0, 1000).map((row) => ({...row}))
+          if (changed) rows = rows.map((row) => ({...row,
+            ...(query.includes('chainDays(') ? {circulation: '${token(200)}'} : {}),
+            ...(query.includes('vaultDays(') ? {totalAssets: '${token(200)}'} : {}),
+            ...(query.includes('claimDays(') ? {phalaClaimCount: '4'} : {}),
+          }))
+          if (env.MODE === 'invalid-page') rows = rows.reverse()
+          if (env.MODE === 'unreviewed') rows = rows.map((row) => row.vaultImplementationReviewed == null ? row : {
+            ...row, vaultImplementationReviewed: false, accrualMode: 'checkpoint-only',
+          })
+          if (env.MODE === 'changed-mid-page') _meta.deployment += '-changed'
+          return Response.json({data: {_meta, rows}})
+        }}
+      `,
         },
       ],
     }),
   )
   try {
     const db = await runtime.getD1Database('DB', 'analytics')
-    // D1 exec accepts single-line statements for migration/bootstrap maintenance.
     await db.exec(schema.replaceAll('\n', ' '))
     await db
-      .prepare(`
-      WITH RECURSIVE dates(date) AS (
-        SELECT ?1 UNION ALL SELECT date(date, '+1 day') FROM dates WHERE date < ?2
-      ) INSERT INTO circulation_daily
-      SELECT date, 1, NULL, NULL, NULL, 'archive' FROM dates
-    `)
-      .bind(FIRST_CIRCULATION_DATE, shiftDate(yesterday, -1))
+      .prepare('INSERT INTO legacy_circulation_day VALUES (?, 3, 4)')
+      .bind(today)
       .run()
-    if (mode === 'old-snapshot-404') {
-      await db
-        .prepare(
-          "INSERT INTO circulation_daily VALUES (?, 100, 2, NULL, NULL, 'api')",
-        )
-        .bind(yesterday)
-        .run()
-      await db
-        .prepare('DELETE FROM circulation_daily WHERE date = ?')
-        .bind(shiftDate(yesterday, -1))
-        .run()
-    }
     await db
       .prepare(
-        "INSERT INTO cloud_daily VALUES (?, 90, 10, 5, 20, 1, 12000, 'archive')",
+        "INSERT INTO cloud_daily VALUES (?, 90, 10, 5, 20, NULL, NULL, 1, 12000, 'archive')",
       )
       .bind(shiftDate(yesterday, -2))
       .run()
-    if (mode === 'write-fail')
+    if (mode === 'write-fail') {
+      const columns = [...fields(CHAIN_FIELDS), 'chain']
+      const old = {
+        ...parseDay(chainDay('2000-01-01'), CHAIN_FIELDS),
+        chain: 'ethereum',
+      }
+      await db
+        .prepare(
+          `INSERT INTO circulation_day (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        )
+        .bind(
+          ...columns.map((key) => {
+            const value = record(old)[key]
+            return typeof value === 'boolean' ? Number(value) : value
+          }),
+        )
+        .run()
+      await db
+        .prepare(
+          "INSERT INTO sync_state VALUES ('deployment:ethereum', 'old', '2000-01-01T00:00:00Z')",
+        )
+        .run()
       await db.exec(
-        "CREATE TRIGGER reject_settlement BEFORE INSERT ON vault_settlements BEGIN SELECT RAISE(ABORT, 'test write failure'); END;",
+        "CREATE TRIGGER reject_day BEFORE INSERT ON circulation_day BEGIN SELECT RAISE(ABORT, 'test write failure'); END;",
       )
-    const worker = await runtime.getWorker('analytics')
-    const initialHealth = await worker.fetch(
-      'https://analytics.test/api/health',
-    )
-    assert.equal(initialHealth.status, 503)
-    const result = await worker.scheduled({cron: '17 * * * *', scheduledTime})
-    const stubs = await runtime.getWorker('upstream-stubs')
-    const callsResponse = await stubs.fetch('https://control.test/')
-    const calls: unknown = await callsResponse.json()
-    assert.ok(Array.isArray(calls))
-    const checkpoint = await db
-      .prepare("SELECT value FROM sync_state WHERE key = 'vault_block'")
-      .first<string>('value')
-    if (mode === 'old-snapshot-404') {
-      assert.equal(
-        result.outcome,
-        'exception',
-        'An older snapshot 404 fails the scheduled run',
-      )
-      assert.equal(
-        checkpoint,
-        String(lastBlock),
-        'Other streams still complete',
-      )
-      assert.equal(
-        await db
-          .prepare('SELECT date FROM circulation_daily WHERE date = ?')
-          .bind(shiftDate(yesterday, -1))
-          .first(),
-        null,
-      )
-      const snapshotCalls = calls
-        .map((value) => new URL(String(record(value).url)))
-        .filter((url) => url.pathname === '/api/snapshot')
-      assert.equal(snapshotCalls.length, 1)
-      assert.equal(
-        snapshotCalls[0]?.searchParams.get('date'),
-        shiftDate(yesterday, -1),
-      )
-      continue
     }
-    const failed = !['ok', 'snapshot-404'].includes(mode)
+    const worker = await runtime.getWorker('analytics')
+    const stubs = await runtime.getWorker('upstream-stubs')
+    assert.equal(
+      (await worker.fetch('https://analytics.test/api/health')).status,
+      503,
+    )
+    const result = await worker.scheduled({cron: '17 * * * *', scheduledTime})
+    const failed = !['ok', 'pagination', 'unreviewed'].includes(mode)
     assert.equal(
       result.outcome,
       failed ? 'exception' : 'ok',
-      `Scheduled outcome: ${mode}`,
+      `Scheduled outcome ${mode}`,
     )
-    assert.equal(
-      checkpoint,
-      failed ? null : String(lastBlock),
-      `Checkpoint: ${mode}`,
-    )
+    const checkpoint = await db
+      .prepare("SELECT value FROM sync_state WHERE key = 'deployment:ethereum'")
+      .first<string>('value')
     if (failed) {
       assert.equal(
+        checkpoint,
+        mode === 'write-fail' ? 'old' : null,
+        `Checkpoint ${mode}`,
+      )
+      assert.equal(
         await db
-          .prepare('SELECT COUNT(*) AS count FROM vault_settlements')
+          .prepare('SELECT COUNT(*) AS count FROM circulation_day')
+          .first<number>('count'),
+        mode === 'write-fail' ? 1 : 0,
+      )
+      assert.equal(
+        await db
+          .prepare('SELECT COUNT(*) AS count FROM vault_day')
           .first<number>('count'),
         0,
       )
+      const calls: unknown = await (
+        await stubs.fetch('https://control.test')
+      ).json()
+      assert.ok(Array.isArray(calls))
       assert.ok(
         calls.every(
-          (value) => !String(record(value).url).includes('not-followed.test'),
+          (call) => !String(record(call).url).includes('not-followed.test'),
         ),
       )
-      if (mode === 'redirect' || mode === 'server') {
-        assert.equal(
-          calls.length,
-          4,
-          'All independent streams attempted without following redirects',
-        )
-        assert.equal(
-          await db
-            .prepare("SELECT value FROM sync_state WHERE key = 'realtime'")
-            .first(),
-          null,
-        )
-      }
       continue
     }
+    assert.equal(checkpoint, 'ethereum-v1')
     const response = await worker.fetch('https://analytics.test/api/data')
     assert.equal(response.status, 200)
-    assert.equal(response.headers.get('Cache-Control'), 'public, max-age=300')
     const data = record(await response.json())
-    assert.deepEqual(data.realtime, {
-      totalCirculation: 102,
-      timestamp: `${today}T07:00:00.000Z`,
-    })
-    assert.ok(Array.isArray(data.circulation))
-    if (mode === 'ok')
-      assert.deepEqual(data.circulation.at(-1), {
-        date: yesterday,
-        ethereum: 100,
-        base: 2,
-        phala: null,
-        khala: null,
-        total: 102,
-      })
-    else
-      assert.equal(
-        record(data.circulation.at(-1)).date,
-        shiftDate(yesterday, -1),
-      )
-    assert.deepEqual(data.vault, [
-      {date: yesterday, totalAssets: 100, dailyRewards: 2},
-    ])
+    assert.ok(Array.isArray(data.chainCirculation))
+    assert.equal(data.chainCirculation.length, mode === 'pagination' ? 1002 : 4)
+    assert.ok(Array.isArray(data.vault))
+    assert.equal(record(data.vault.at(-1)).totalAssets, 100)
+    assert.equal(record(data.vault.at(-1)).settlementTotalAssets, 99)
+    assert.equal(record(data.vault.at(-1)).flowDate, yesterday)
+    assert.equal(record(data.vault.at(-1)).apr, 0.05)
+    assert.equal(record(data.vault.at(-1)).paused, false)
+    assert.equal(
+      record(data.vault.at(-1)).vaultImplementationReviewed,
+      mode !== 'unreviewed',
+    )
+    assert.ok(Array.isArray(data.claims))
+    assert.equal(record(data.claims.at(-1)).khalaFree, 4)
     assert.ok(Array.isArray(data.cloud))
     assert.deepEqual(data.cloud.at(-1), {
       date: yesterday,
@@ -261,37 +234,68 @@ for (const mode of [
       totalVms: 20,
       runningVms: 10,
       totalVcpu: 40,
+      runningVcpu: 24,
+      activeUsers: 8,
       captured: 12000,
       backfilled: false,
     })
     assert.equal(record(data.cloud.at(-2)).backfilled, true)
-    assert.equal(record(data.cloud.at(0)).backfilled, false)
+    assert.equal(record(data.cloud[0]).runningVcpu, null)
     assert.equal(
-      await db
-        .prepare('SELECT source FROM cloud_daily WHERE date = ?')
-        .bind(shiftDate(yesterday, -1))
-        .first<string>('source'),
-      'api-backfill',
+      (await worker.fetch('https://analytics.test/api/health')).status,
+      mode === 'unreviewed' ? 503 : 200,
     )
-    const page = await worker.fetch('https://analytics.test/')
-    assert.equal(page.status, 200)
-    assert.ok(page.headers.has('Content-Security-Policy'))
-    assert.ok((await page.text()).includes('Phala Analytics'))
-    assert.match(
-      page.headers.get('Content-Security-Policy') ?? '',
-      /script-src 'self' https:\/\/cdn\.jsdelivr\.net\/npm\/uplot@1\.6\.32\//,
+    if (mode === 'unreviewed') continue
+    const states = async () =>
+      (
+        await db
+          .prepare('SELECT key, value, updated_at FROM sync_state ORDER BY key')
+          .all()
+      ).results
+    const before = await states()
+    assert.equal(
+      (await worker.scheduled({cron: '17 * * * *', scheduledTime})).outcome,
+      'ok',
     )
-    for (const [path, type] of [
-      ['/app.js', 'text/javascript; charset=utf-8'],
-      ['/app.css', 'text/css; charset=utf-8'],
-      ['/favicon.svg', 'image/svg+xml'],
-    ]) {
-      const asset = await worker.fetch(`https://analytics.test${path}`)
-      assert.equal(asset.status, 200)
-      assert.equal(asset.headers.get('Content-Type'), type)
-      assert.ok((await asset.text()).length > 0)
+    assert.deepEqual(await states(), before)
+    if (mode === 'pagination') {
+      assert.equal(
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM circulation_day WHERE chain = 'ethereum'",
+          )
+          .first<number>('count'),
+        1001,
+      )
+      const calls: unknown = await (
+        await stubs.fetch('https://control.test')
+      ).json()
+      assert.ok(Array.isArray(calls))
+      assert.ok(
+        calls.some((call) =>
+          String(record(call).body).includes(shiftDate(today, -1)),
+        ),
+      )
+      continue
     }
-    for (const path of ['/', '/api/data', '/api/health']) {
+    assert.ok(Array.isArray(data.circulation))
+    assert.deepEqual(data.circulation.at(-1), {
+      date: today,
+      ethereum: 100,
+      base: 2,
+      phala: 3,
+      khala: 4,
+      total: 109,
+    })
+    assert.equal((await worker.fetch('https://analytics.test/')).status, 200)
+    for (const path of [
+      '/',
+      '/api/data',
+      '/api/health',
+      '/app.js',
+      '/app.css',
+      '/favicon.svg',
+    ]) {
       const head = await worker.fetch(`https://analytics.test${path}`, {
         method: 'HEAD',
       })
@@ -306,64 +310,84 @@ for (const mode of [
       (await worker.fetch('https://analytics.test/', {method: 'POST'})).status,
       405,
     )
-    const before = await db
-      .prepare('SELECT key, value, updated_at FROM sync_state ORDER BY key')
-      .all()
-    const counts = await db
-      .prepare(`SELECT
-      (SELECT COUNT(*) FROM circulation_daily) AS circulation,
-      (SELECT COUNT(*) FROM cloud_daily) AS cloud,
-      (SELECT COUNT(*) FROM vault_settlements) AS vault
-    `)
-      .first()
-    if (mode === 'ok') {
-      assert.equal(
-        (await worker.scheduled({cron: '17 * * * *', scheduledTime})).outcome,
-        'ok',
-      )
-      assert.deepEqual(
-        (
-          await db
-            .prepare(
-              'SELECT key, value, updated_at FROM sync_state ORDER BY key',
-            )
-            .all()
-        ).results,
-        before.results,
-      )
-      assert.deepEqual(
-        await db
-          .prepare(`SELECT
-        (SELECT COUNT(*) FROM circulation_daily) AS circulation,
-        (SELECT COUNT(*) FROM cloud_daily) AS cloud,
-        (SELECT COUNT(*) FROM vault_settlements) AS vault
-      `)
-          .first(),
-        counts,
-      )
-      const again: unknown = await (
-        await stubs.fetch('https://control.test/')
-      ).json()
-      assert.ok(Array.isArray(again))
-      assert.equal(
-        again.length - calls.length,
-        2,
-        'Caught-up run only fetches realtime and chain head',
-      )
-    }
-    await db
-      .prepare(
-        "UPDATE sync_state SET value = '2000-01-01T00:00:00Z' WHERE key = 'vault_scan'",
-      )
-      .run()
+    await stubs.fetch('https://control.test', {method: 'POST'})
     assert.equal(
-      (await worker.fetch('https://analytics.test/api/health')).status,
-      503,
+      (await worker.scheduled({cron: '17 * * * *', scheduledTime})).outcome,
+      'ok',
     )
+    assert.equal(
+      await db
+        .prepare(
+          "SELECT value FROM sync_state WHERE key = 'deployment:ethereum'",
+        )
+        .first<string>('value'),
+      'ethereum-v2',
+    )
+    assert.equal(
+      await db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM circulation_day WHERE chain = 'ethereum'",
+        )
+        .first<number>('count'),
+      1,
+    )
+    assert.equal(
+      await db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM circulation_day WHERE chain = 'base'",
+        )
+        .first<number>('count'),
+      2,
+    )
+    assert.equal(
+      await db
+        .prepare('SELECT totalAssets FROM vault_day')
+        .first<number>('totalAssets'),
+      200,
+    )
+    assert.equal(
+      await db
+        .prepare('SELECT phalaClaimCount FROM claim_day')
+        .first<number>('phalaClaimCount'),
+      4,
+    )
+    assert.equal(
+      await db
+        .prepare('SELECT COUNT(*) AS count FROM legacy_circulation_day')
+        .first<number>('count'),
+      1,
+    )
+    assert.equal(
+      await db
+        .prepare('SELECT COUNT(*) AS count FROM cloud_daily')
+        .first<number>('count'),
+      3,
+    )
+    const sunday = new Date(scheduledTime)
+    sunday.setUTCDate(sunday.getUTCDate() - sunday.getUTCDay())
+    assert.equal(
+      (await worker.scheduled({cron: '17 * * * *', scheduledTime: sunday}))
+        .outcome,
+      'ok',
+    )
+    const key = `cloud-daily/${sunday.toISOString().slice(0, 10)}.json`
+    const bucket = await runtime.getR2Bucket('BACKUP', 'analytics')
+    const object = await bucket.get(key)
+    assert.ok(object)
+    const exported = record(await object.json())
+    assert.deepEqual(
+      exported.rows,
+      (await db.prepare('SELECT * FROM cloud_daily ORDER BY date').all())
+        .results,
+    )
+    assert.equal(object.httpMetadata?.contentType, 'application/json')
+    const version = object.version
+    await worker.scheduled({cron: '17 * * * *', scheduledTime: sunday})
+    assert.equal((await bucket.head(key))?.version, version)
   } finally {
     await runtime.dispose()
   }
 }
 console.log(
-  'workerd: all streams, idempotency, range halving, rollback, HTTP failures and endpoints verified',
+  'workerd: incremental fills, idempotency, deployment reloads, rollback, HTTP failures, review flags, R2 export and endpoints verified',
 )

@@ -3,23 +3,26 @@ import {
   cloudSource,
   cloudWindow,
   dailyPrices,
-  decodeSettlement,
-  FIRST_CIRCULATION_DATE,
   FIRST_CLOUD_DATE,
-  halveChunk,
-  hexNumber,
-  MISSING_CIRCULATION_SQL,
   realtimeRow,
   record,
   selectCloudRows,
   shiftDate,
-  snapshotRow,
-  VAULT_ADDRESS,
-  VAULT_DEPLOY_BLOCK,
-  VAULT_TOPIC,
 } from './data'
+import {
+  CHAINS,
+  dayQuery,
+  ENTITIES,
+  fields,
+  graphql,
+  latestStatus,
+  META_QUERY,
+  parsePage,
+  subgraphMeta,
+} from './subgraph'
 
 type Request = (url: string, init?: RequestInit) => Promise<Response>
+type SqlValue = string | number | null
 
 export const stateStatement = (
   db: D1Database,
@@ -29,19 +32,32 @@ export const stateStatement = (
 ) =>
   db
     .prepare(`
-  INSERT INTO sync_state (key, value, updated_at) VALUES (?, ?, ?)
-  ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-  WHERE sync_state.value <> excluded.value
-`)
+    INSERT INTO sync_state (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    WHERE sync_state.value <> excluded.value
+  `)
     .bind(key, value, now.toISOString())
 
-class RpcError extends Error {
-  constructor(
-    readonly range: boolean,
-    code: unknown,
-  ) {
-    super(`Ethereum RPC error (${typeof code === 'number' ? code : 'unknown'})`)
+// D1 permits at most 100 bound parameters per statement.
+const insertStatements = (
+  db: D1Database,
+  table: string,
+  columns: string[],
+  rows: SqlValue[][],
+) => {
+  const size = Math.floor(100 / columns.length)
+  const statements: D1PreparedStatement[] = []
+  for (let index = 0; index < rows.length; index += size) {
+    const chunk = rows.slice(index, index + size)
+    statements.push(
+      db
+        .prepare(`INSERT INTO ${table} (${columns.join(', ')})
+      VALUES ${chunk.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ')}
+      ON CONFLICT DO NOTHING`)
+        .bind(...chunk.flat()),
+    )
   }
+  return statements
 }
 
 export const sync = async (env: Env, now: Date, request: Request = fetch) => {
@@ -61,7 +77,6 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
         signal: AbortSignal.timeout(timeout),
       })
     } catch {
-      // RPC URLs may contain credentials. Never include them in logs or errors.
       throw new Error(`Request failed: ${label}`)
     }
     if (!response.ok) {
@@ -92,51 +107,107 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
       new URL('/api/all', env.CIRCULATION_API_URL).toString(),
       'Circulation realtime',
     )
-    const row = realtimeRow(await json(response))
-    await stateStatement(db, 'realtime', JSON.stringify(row), now).run()
+    await stateStatement(
+      db,
+      'realtime',
+      JSON.stringify(realtimeRow(await json(response))),
+      now,
+    ).run()
   })
 
-  await attempt('circulation', async () => {
-    const {results} = await db
-      .prepare(MISSING_CIRCULATION_SQL)
-      .bind(FIRST_CIRCULATION_DATE, yesterday)
-      .all<{date: string}>()
-    for (const [index, {date}] of results.entries()) {
-      if (index > 0) await new Promise((resolve) => setTimeout(resolve, 3_000))
-      const url = new URL('/api/snapshot', env.CIRCULATION_API_URL)
-      url.searchParams.set('date', date)
-      let response: Response
-      try {
-        response = await request(url.toString(), {
-          redirect: 'manual',
-          signal: AbortSignal.timeout(30_000),
-        })
-      } catch {
-        throw new Error(`Snapshot request failed: ${date}`)
-      }
-      if (response.status === 404) {
-        await response.body?.cancel()
-        if (date < yesterday)
-          throw new Error(
-            `Circulation snapshot missing for completed UTC date: ${date}`,
+  for (const chain of CHAINS)
+    await attempt(chain, async () => {
+      const url =
+        chain === 'ethereum' ? env.GOLDSKY_ETHEREUM_URL : env.GOLDSKY_BASE_URL
+      const meta = await graphql(url, META_QUERY, {}, request)
+      const deployment = subgraphMeta(meta)
+      if (record(meta.latest).chain !== chain)
+        throw new Error('Subgraph chain mismatch')
+      const status = latestStatus(meta.latest)
+      const key = `deployment:${chain}`
+      const previous = await db
+        .prepare('SELECT value FROM sync_state WHERE key = ?')
+        .bind(key)
+        .first<string>('value')
+      const changed = previous !== deployment
+      let reset = changed
+      for (const {entity, table, spec} of ENTITIES) {
+        if (chain === 'base' && table !== 'circulation_day') continue
+        const after = changed
+          ? ''
+          : ((await (table === 'circulation_day'
+              ? db
+                  .prepare(
+                    `SELECT MAX(date) AS date FROM ${table} WHERE chain = ?`,
+                  )
+                  .bind(chain)
+              : db.prepare(`SELECT MAX(date) AS date FROM ${table}`)
+            ).first<string>('date')) ?? '')
+        const page = await graphql(
+          url,
+          dayQuery(entity, spec),
+          {after},
+          request,
+        )
+        if (subgraphMeta(page) !== deployment)
+          throw new Error('Subgraph deployment changed during sync')
+        const rows = parsePage(page.rows, spec, after)
+        if (
+          table === 'circulation_day' &&
+          Array.isArray(page.rows) &&
+          page.rows.some((row) => record(row).chain !== chain)
+        )
+          throw new Error('Subgraph chain mismatch')
+        const columns = fields(spec)
+        const statements: D1PreparedStatement[] = []
+        if (reset) {
+          statements.push(
+            db
+              .prepare('DELETE FROM circulation_day WHERE chain = ?')
+              .bind(chain),
           )
-        console.log(`Circulation snapshot not finalized: ${date}`)
-        break
+          if (chain === 'ethereum')
+            statements.push(
+              db.prepare('DELETE FROM vault_day'),
+              db.prepare('DELETE FROM claim_day'),
+            )
+          statements.push(stateStatement(db, key, deployment, now))
+        }
+        if (table === 'circulation_day')
+          statements.push(
+            stateStatement(
+              db,
+              `subgraph:${chain}`,
+              JSON.stringify({deployment, ...status}),
+              now,
+            ),
+          )
+        statements.push(
+          ...insertStatements(
+            db,
+            table,
+            table === 'circulation_day' ? [...columns, 'chain'] : columns,
+            rows.map((row) => {
+              const values = columns.map((field): SqlValue => {
+                const value = record(row)[field]
+                if (
+                  value === null ||
+                  typeof value === 'string' ||
+                  typeof value === 'number'
+                )
+                  return value
+                if (typeof value === 'boolean') return Number(value)
+                throw new Error('Invalid cache column')
+              })
+              return table === 'circulation_day' ? [...values, chain] : values
+            }),
+          ),
+        )
+        // Rebuild/reset, each immutable page, and its MAX(date) checkpoint are atomic.
+        if (statements.length) await db.batch(statements)
+        reset = false
       }
-      if (!response.ok) {
-        await response.body?.cancel()
-        throw new Error(`Snapshot ${date}: HTTP ${response.status}`)
-      }
-      const row = snapshotRow(await json(response), date)
-      await db
-        .prepare(`
-        INSERT INTO circulation_daily (date, ethereum, base, phala, khala, source)
-        VALUES (?, ?, ?, ?, ?, 'api') ON CONFLICT DO NOTHING
-      `)
-        .bind(row.date, row.ethereum, row.base, row.phala, row.khala)
-        .run()
-    }
-  })
+    })
 
   await attempt('cloud', async () => {
     const lastDate =
@@ -153,20 +224,29 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
     // Validate the whole contiguous window before writing. A missing day fails closed.
     const rows = selectCloudRows(await json(response), lastDate, yesterday)
     await db.batch(
-      rows.map((row) =>
-        db
-          .prepare(`
-      INSERT INTO cloud_daily (date, total_users, total_vms, running_vms, total_vcpu, source)
-      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
-    `)
-          .bind(
-            row.date,
-            row.total_users,
-            row.total_vms,
-            row.running_vms,
-            row.total_vcpu,
-            cloudSource(row.date, yesterday),
-          ),
+      insertStatements(
+        db,
+        'cloud_daily',
+        [
+          'date',
+          'total_users',
+          'total_vms',
+          'running_vms',
+          'total_vcpu',
+          'running_vcpu',
+          'active_users',
+          'source',
+        ],
+        rows.map((row) => [
+          row.date,
+          row.total_users,
+          row.total_vms,
+          row.running_vms,
+          row.total_vcpu,
+          row.running_vcpu,
+          row.active_users,
+          cloudSource(row.date, yesterday),
+        ]),
       ),
     )
   })
@@ -195,118 +275,45 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
     const prices = dailyPrices(
       await json(await checkedFetch(url.toString(), 'PHA price')),
     )
-    const statements = rows.map((row) => {
+    const priced = rows.map((row) => {
       const price = prices.get(row.date)
       if (price == null) throw new Error(`PHA price missing ${row.date}`)
-      return db
-        .prepare(`
-        UPDATE cloud_daily SET pha_usd = ?, captured = ? WHERE date = ? AND captured IS NULL
-      `)
-        .bind(price, captured(row.total_vcpu, price), row.date)
+      return [row.date, price, captured(row.total_vcpu, price)]
     })
+    const statements: D1PreparedStatement[] = []
+    for (let index = 0; index < priced.length; index += 33) {
+      const chunk = priced.slice(index, index + 33)
+      statements.push(
+        db
+          .prepare(`
+        WITH prices(date, price, captured) AS (VALUES ${chunk.map(() => '(?, ?, ?)').join(', ')})
+        UPDATE cloud_daily SET pha_usd = prices.price, captured = prices.captured
+        FROM prices WHERE cloud_daily.date = prices.date AND cloud_daily.captured IS NULL
+      `)
+          .bind(...chunk.flat()),
+      )
+    }
     await db.batch(statements)
   })
 
-  await attempt('vault', async () => {
-    let calls = 0
-    const rpc = async (method: string, params: unknown[]) => {
-      calls++
-      const response = await checkedFetch(
-        env.ETHEREUM_RPC_URL,
-        'Ethereum RPC',
-        {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({jsonrpc: '2.0', id: calls, method, params}),
-        },
-      )
-      const body = record(await json(response))
-      if (body.jsonrpc !== '2.0' || body.id !== calls)
-        throw new Error('Invalid Ethereum RPC response')
-      if (body.error != null) {
-        const error = record(body.error)
-        const message = typeof error.message === 'string' ? error.message : ''
-        throw new RpcError(
-          error.code === -32005 ||
-            /block range|too many (?:results|logs)|range.*(?:large|limit)|response size|query returned more|limited to|limit.*blocks/i.test(
-              message,
-            ),
-          error.code,
-        )
-      }
-      return body.result
-    }
-    const head = hexNumber(await rpc('eth_blockNumber', [])) - 12
-    const saved = await db
-      .prepare("SELECT value FROM sync_state WHERE key = 'vault_block'")
+  await attempt('backup', async () => {
+    if (now.getUTCDay() !== 0) return
+    const date = now.toISOString().slice(0, 10)
+    const previous = await db
+      .prepare("SELECT value FROM sync_state WHERE key = 'cloud_backup'")
       .first<string>('value')
-    let checkpoint = saved == null ? VAULT_DEPLOY_BLOCK - 1 : Number(saved)
-    if (
-      !Number.isSafeInteger(checkpoint) ||
-      checkpoint < VAULT_DEPLOY_BLOCK - 1
+    if (previous === date) return
+    const {results: rows} = await db
+      .prepare('SELECT * FROM cloud_daily ORDER BY date')
+      .all()
+    await env.BACKUP.put(
+      `cloud-daily/${date}.json`,
+      JSON.stringify({exportedAt: now.toISOString(), rows}),
+      {
+        httpMetadata: {contentType: 'application/json'},
+      },
     )
-      throw new Error('Invalid vault checkpoint')
-    if (checkpoint >= head) return
-    let size = 10_000
-    while (checkpoint < head && calls < 100) {
-      const from = checkpoint + 1
-      const through = Math.min(head, from + size - 1)
-      let logs: unknown
-      try {
-        logs = await rpc('eth_getLogs', [
-          {
-            address: VAULT_ADDRESS,
-            topics: [VAULT_TOPIC],
-            fromBlock: `0x${from.toString(16)}`,
-            toBlock: `0x${through.toString(16)}`,
-          },
-        ])
-      } catch (error) {
-        if (!(error instanceof RpcError) || !error.range) throw error
-        size = halveChunk(through - from + 1)
-        if (calls >= 100)
-          throw new Error('Vault RPC budget exhausted while reducing range')
-        continue
-      }
-      if (!Array.isArray(logs)) throw new Error('Expected Ethereum logs')
-      const rows = logs.map(decodeSettlement)
-      if (
-        rows.some(
-          (row) => row.block_number < from || row.block_number > through,
-        )
-      )
-        throw new Error('Vault RPC returned logs outside requested range')
-      const statements: D1PreparedStatement[] = []
-      // Keep every statement within D1's 100-parameter limit.
-      for (let index = 0; index < rows.length; index += 20) {
-        const chunk = rows.slice(index, index + 20)
-        statements.push(
-          db
-            .prepare(`
-          INSERT INTO vault_settlements (block_number, log_index, settled_at, rewards, total_assets)
-          VALUES ${chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')} ON CONFLICT DO NOTHING
-        `)
-            .bind(
-              ...chunk.flatMap((row) => [
-                row.block_number,
-                row.log_index,
-                row.settled_at,
-                row.rewards,
-                row.total_assets,
-              ]),
-            ),
-        )
-      }
-      statements.push(stateStatement(db, 'vault_block', String(through), now))
-      // Mark freshness only once the backfill has reached the finalized head.
-      if (through === head)
-        statements.push(
-          stateStatement(db, 'vault_scan', now.toISOString(), now),
-        )
-      await db.batch(statements)
-      checkpoint = through
-    }
-    console.log('Vault scan checkpoint', {block: checkpoint, head, calls})
+    await stateStatement(db, 'cloud_backup', date, now).run()
   })
 
   if (failures.length)
