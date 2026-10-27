@@ -20,19 +20,37 @@ const localTime = new Intl.DateTimeFormat(undefined, {
   timeZoneName: 'short',
 })
 
+const percent = new Intl.NumberFormat(undefined, {
+  style: 'percent',
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
+
 const formatNumber = (value) => (value == null ? '–' : integer.format(value))
 const toSeconds = (date) => Date.parse(`${date}T00:00:00Z`) / 1000
 const formatDay = (date) => utcDay.format(new Date(`${date}T00:00:00Z`))
 
+// Series colors are CSS custom properties. Stacked series are cumulative from the
+// first stacked one up; other series are drawn as given.
 const STREAMS = {
   circulation: [
-    {key: 'total', label: 'Total', color: 1},
-    {key: 'ethereum', label: 'Ethereum', color: 2},
-    {key: 'base', label: 'Base', color: 3},
-    {key: 'phala', label: 'Phala', color: 4},
-    {key: 'khala', label: 'Khala', color: 5},
+    {key: 'total', label: 'Total', color: '--text-secondary'},
+    {key: 'ethereum', label: 'Ethereum', color: 1, stack: true},
+    {key: 'base', label: 'Base', color: 2, stack: true},
+    {key: 'phala', label: 'Phala', color: 3, stack: true},
+    {key: 'khala', label: 'Khala', color: 4, stack: true},
   ],
   vault: [{key: 'totalAssets', label: 'Total assets', color: 1, area: true}],
+  // Each day's total is held across that day, like a gapless bar.
+  rewards: [
+    {
+      key: 'dailyRewards',
+      label: 'Daily rewards',
+      color: 1,
+      area: true,
+      step: true,
+    },
+  ],
   users: [{key: 'totalUsers', label: 'Users', color: 1, area: true}],
   vms: [
     {key: 'totalVms', label: 'Total VMs', color: 1, area: true},
@@ -102,7 +120,7 @@ const summary = (rows, series) => {
     })
     .filter(Boolean)
     .join(', ')
-  return `Line chart of ${series.map(({label}) => label).join(', ')} from ${range}. Latest: ${values}.`
+  return `Chart of ${series.map(({label}) => label).join(', ')} from ${range}. Latest: ${values}.`
 }
 
 const renderChart = (figure, rows, series, ranges) => {
@@ -123,7 +141,9 @@ const renderChart = (figure, rows, series, ranges) => {
     target.append(message)
     return
   }
-  const colors = series.map(({color}) => cssVar(`--series-${color}`))
+  const colors = series.map(({color}) =>
+    cssVar(typeof color === 'number' ? `--series-${color}` : color),
+  )
   const axis = {
     stroke: cssVar('--axis'),
     font: '12px system-ui, -apple-system, "Segoe UI", sans-serif',
@@ -132,10 +152,22 @@ const renderChart = (figure, rows, series, ranges) => {
   }
   const shade = cssVar('--backfill')
   const surface = cssVar('--surface')
+  const sums = rows.map(() => 0)
   const data = [
     rows.map(({date}) => toSeconds(date)),
-    ...series.map(({key}) => rows.map((row) => row[key])),
+    ...series.map(({key, stack}) =>
+      rows.map((row, index) => {
+        if (!stack) return row[key]
+        sums[index] += row[key] ?? 0
+        return sums[index]
+      }),
+    ),
   ]
+  // Each stacked series fills down to the stacked series below it.
+  const stacked = series.flatMap(({stack}, index) => (stack ? [index + 1] : []))
+  const bands = stacked.slice(1).map((upper, index) => ({
+    series: [upper, stacked[index]],
+  }))
   const plot = new uPlot(
     {
       width: target.clientWidth,
@@ -148,15 +180,22 @@ const renderChart = (figure, rows, series, ranges) => {
           value: (_, seconds) =>
             seconds == null ? '–' : utcDay.format(new Date(seconds * 1000)),
         },
-        ...series.map(({label, area}, index) => ({
+        ...series.map(({key, label, area, stack, step}, index) => ({
           label,
           stroke: colors[index],
-          width: 2,
-          fill: area ? withAlpha(colors[index], 0.1) : undefined,
+          width: stack ? 1 : 2,
+          fill: stack
+            ? withAlpha(colors[index], 0.45)
+            : area
+              ? withAlpha(colors[index], step ? 0.3 : 0.1)
+              : undefined,
+          paths: step ? uPlot.paths.stepped({align: 1}) : undefined,
           points: {show: false},
-          value: (_, value) => formatNumber(value),
+          // Legends show each row's own value, not the stacked sum.
+          value: (_, __, ___, row) => formatNumber(rows[row]?.[key]),
         })),
       ],
+      bands,
       axes: [
         {...axis},
         {
@@ -268,6 +307,42 @@ const render = (data) => {
     `as of ${localTime.format(new Date(data.realtime.timestamp))}`,
   )
   setStat('vault', data.vault, 'totalAssets')
+  setStat('stakers', data.vault, 'stakers')
+  const vault = data.vault.at(-1)
+  if (vault && !vault.vaultImplementationReviewed) {
+    setText('[data-value="apr"]', '–')
+    setText('[data-as-of="apr"]', 'Hidden while a Vault upgrade is reviewed')
+  } else {
+    setText('[data-value="apr"]', vault ? percent.format(vault.apr) : '–')
+    setText('[data-as-of="apr"]', vault ? `as of ${formatDay(vault.date)}` : '')
+  }
+
+  // Claim rows are daily flows; the counters show their totals.
+  const sum = (...keys) =>
+    data.claims.reduce(
+      (total, row) => keys.reduce((part, key) => part + row[key], total),
+      0,
+    )
+  const lastClaimDay = data.claims.at(-1)
+  const breakdown = (khala, phala, format) =>
+    lastClaimDay
+      ? `Khala ${format(khala)} · Phala ${format(phala)}, through ${formatDay(lastClaimDay.flowDate)}`
+      : ''
+  const claims = [sum('khalaClaimCount'), sum('phalaClaimCount')]
+  const claimed = [
+    sum('khalaFree', 'khalaStaked'),
+    sum('phalaFree', 'phalaStaked'),
+  ]
+  setText(
+    '[data-value="claimCount"]',
+    formatNumber(lastClaimDay && claims[0] + claims[1]),
+  )
+  setText('[data-as-of="claimCount"]', breakdown(...claims, formatNumber))
+  setText(
+    '[data-value="claimed"]',
+    formatNumber(lastClaimDay && claimed[0] + claimed[1]),
+  )
+  setText('[data-as-of="claimed"]', breakdown(...claimed, compact.format))
   setStat('users', data.cloud, 'totalUsers')
   setStat('totalVms', data.cloud, 'totalVms')
   setStat('runningVms', data.cloud, 'runningVms')
@@ -278,6 +353,14 @@ const render = (data) => {
   state = {
     circulation: {rows: data.circulation, ranges: []},
     vault: {rows: data.vault, ranges: []},
+    // Daily flows belong to the UTC day before each midnight snapshot.
+    rewards: {
+      rows: data.vault.map(({flowDate, dailyRewards}) => ({
+        date: flowDate,
+        dailyRewards,
+      })),
+      ranges: [],
+    },
   }
   for (const name of ['users', 'vms', 'vcpu', 'captured'])
     state[name] = {

@@ -40,7 +40,7 @@ const PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Phala Analytics</title>
-<meta name="description" content="Public statistics for the $PHA token, the $PHA Vault and Phala Cloud.">
+<meta name="description" content="Public statistics for the $PHA token, the $PHA Vault, sunset claims and Phala Cloud.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${UPLOT_STYLE}" integrity="${UPLOT_STYLE_SRI}" crossorigin="anonymous" referrerpolicy="no-referrer">
 <link rel="stylesheet" href="/app.css">
@@ -71,7 +71,7 @@ const PAGE = `<!doctype html>
         <dl class="stats card">
           ${stat('circulation', 'Circulating supply', 'PHA')}
         </dl>
-        ${chart('circulation', 'Circulating supply', 'Daily, by chain (PHA)')}
+        ${chart('circulation', 'Circulating supply', 'By chain at 00:00 UTC each day, stacked (PHA)')}
       </div>
     </section>
     <section aria-labelledby="vault">
@@ -79,12 +79,25 @@ const PAGE = `<!doctype html>
         <h2 id="vault">$PHA Vault</h2>
         <p>Stake $PHA on Ethereum to get rewards: <a href="https://app.phala.network/staking">app.phala.network/staking</a></p>
       </div>
-      <div class="split">
-        <dl class="stats card">
-          ${stat('vault', 'Total assets', 'PHA')}
-        </dl>
-        ${chart('vault', 'Total assets', 'Last settlement of each day (PHA)')}
+      <dl class="stats">
+        <div class="card wide">${stat('vault', 'Total assets', 'PHA')}</div>
+        <div class="card">${stat('apr', 'APR')}</div>
+        <div class="card">${stat('stakers', 'Stakers')}</div>
+      </dl>
+      <div class="charts">
+        ${chart('vault', 'Total assets', 'At 00:00 UTC each day (PHA)')}
+        ${chart('rewards', 'Daily rewards', 'Rewards accrued each UTC day (PHA)')}
       </div>
+    </section>
+    <section aria-labelledby="claims">
+      <div class="section-head">
+        <h2 id="claims">Sunset claims</h2>
+        <p>PHA claimed on Ethereum by former Khala and Phala chain holders</p>
+      </div>
+      <dl class="stats">
+        <div class="card wide">${stat('claimCount', 'Claims')}</div>
+        <div class="card wide">${stat('claimed', 'PHA claimed', 'PHA')}</div>
+      </dl>
     </section>
     <section aria-labelledby="cloud">
       <div class="section-head">
@@ -107,7 +120,7 @@ const PAGE = `<!doctype html>
     </section>
   </main>
   <footer>
-    <p class="footer-text">Daily values are UTC days. Sources: the $PHA circulation API, Phala Cloud usage statistics, Ethereum <code>RewardsSettled</code> events of the Phala Vault, and daily PHA prices (Dune through September 22, 2026, CoinGecko after). Data refreshes hourly.</p>
+    <p class="footer-text">Daily values are UTC days. Sources: Phala subgraphs on Ethereum and Base, archived Phala and Khala chain history, the $PHA circulation API, Phala Cloud usage statistics, and daily PHA prices (Dune through September 22, 2026, CoinGecko after). Data refreshes hourly.</p>
     <p class="footer-text"><a href="/api/data">Download the data (JSON)</a></p>
   </footer>
 </div>
