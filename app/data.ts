@@ -26,7 +26,8 @@ export const shiftDate = (date: string, days = 1) =>
 export const finiteNumber = (value: unknown): number => {
   if (
     (typeof value !== 'number' && typeof value !== 'string') ||
-    (typeof value === 'string' && !/^\d+(?:\.\d+)?$/.test(value)) ||
+    (typeof value === 'string' &&
+      !/^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) ||
     !Number.isFinite(Number(value)) ||
     Number(value) < 0
   )

@@ -17,6 +17,7 @@ import {
   graphql,
   latestStatus,
   META_QUERY,
+  PAGE_SIZE,
   parsePage,
   subgraphMeta,
 } from './subgraph'
@@ -133,7 +134,7 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
       let reset = changed
       for (const {entity, table, spec} of ENTITIES) {
         if (chain === 'base' && table !== 'circulation_day') continue
-        const after = changed
+        let after = changed
           ? ''
           : ((await (table === 'circulation_day'
               ? db
@@ -143,69 +144,74 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
                   .bind(chain)
               : db.prepare(`SELECT MAX(date) AS date FROM ${table}`)
             ).first<string>('date')) ?? '')
-        const page = await graphql(
-          url,
-          dayQuery(entity, spec),
-          {after},
-          request,
-        )
-        if (subgraphMeta(page) !== deployment)
-          throw new Error('Subgraph deployment changed during sync')
-        const rows = parsePage(page.rows, spec, after)
-        if (
-          table === 'circulation_day' &&
-          Array.isArray(page.rows) &&
-          page.rows.some((row) => record(row).chain !== chain)
-        )
-          throw new Error('Subgraph chain mismatch')
-        const columns = fields(spec)
-        const statements: D1PreparedStatement[] = []
-        if (reset) {
-          statements.push(
-            db
-              .prepare('DELETE FROM circulation_day WHERE chain = ?')
-              .bind(chain),
+        while (true) {
+          const page = await graphql(
+            url,
+            dayQuery(entity, spec),
+            {after},
+            request,
           )
-          if (chain === 'ethereum')
+          if (subgraphMeta(page) !== deployment)
+            throw new Error('Subgraph deployment changed during sync')
+          const rows = parsePage(page.rows, spec, after)
+          if (
+            table === 'circulation_day' &&
+            Array.isArray(page.rows) &&
+            page.rows.some((row) => record(row).chain !== chain)
+          )
+            throw new Error('Subgraph chain mismatch')
+          const columns = fields(spec)
+          const statements: D1PreparedStatement[] = []
+          if (reset) {
             statements.push(
-              db.prepare('DELETE FROM vault_day'),
-              db.prepare('DELETE FROM claim_day'),
+              db
+                .prepare('DELETE FROM circulation_day WHERE chain = ?')
+                .bind(chain),
             )
-          statements.push(stateStatement(db, key, deployment, now))
-        }
-        if (table === 'circulation_day')
+            if (chain === 'ethereum')
+              statements.push(
+                db.prepare('DELETE FROM vault_day'),
+                db.prepare('DELETE FROM claim_day'),
+              )
+            statements.push(stateStatement(db, key, deployment, now))
+          }
+          if (table === 'circulation_day')
+            statements.push(
+              stateStatement(
+                db,
+                `subgraph:${chain}`,
+                JSON.stringify({deployment, ...status}),
+                now,
+              ),
+            )
           statements.push(
-            stateStatement(
+            ...insertStatements(
               db,
-              `subgraph:${chain}`,
-              JSON.stringify({deployment, ...status}),
-              now,
+              table,
+              table === 'circulation_day' ? [...columns, 'chain'] : columns,
+              rows.map((row) => {
+                const values = columns.map((field): SqlValue => {
+                  const value = record(row)[field]
+                  if (
+                    value === null ||
+                    typeof value === 'string' ||
+                    typeof value === 'number'
+                  )
+                    return value
+                  if (typeof value === 'boolean') return Number(value)
+                  throw new Error('Invalid cache column')
+                })
+                return table === 'circulation_day' ? [...values, chain] : values
+              }),
             ),
           )
-        statements.push(
-          ...insertStatements(
-            db,
-            table,
-            table === 'circulation_day' ? [...columns, 'chain'] : columns,
-            rows.map((row) => {
-              const values = columns.map((field): SqlValue => {
-                const value = record(row)[field]
-                if (
-                  value === null ||
-                  typeof value === 'string' ||
-                  typeof value === 'number'
-                )
-                  return value
-                if (typeof value === 'boolean') return Number(value)
-                throw new Error('Invalid cache column')
-              })
-              return table === 'circulation_day' ? [...values, chain] : values
-            }),
-          ),
-        )
-        // Rebuild/reset, each immutable page, and its MAX(date) checkpoint are atomic.
-        if (statements.length) await db.batch(statements)
-        reset = false
+          // Rebuild/reset, each immutable page, and its MAX(date) checkpoint are atomic.
+          if (statements.length) await db.batch(statements)
+          reset = false
+          const last = rows.at(-1)
+          if (rows.length < PAGE_SIZE || !last) break
+          after = last.date
+        }
       }
     })
 

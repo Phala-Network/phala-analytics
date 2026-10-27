@@ -109,6 +109,27 @@ test('subgraph days convert wei, retain false implementation flags and separate 
   ).toBe(102)
 })
 
+test('subgraph BigDecimal values accept exponents and reject non-finite or malformed strings', () => {
+  const row = parseDay(
+    {...vaultDay('2026-10-27'), apr: '1.2E-7', sharePrice: '2e+3'},
+    VAULT_FIELDS,
+  )
+  expect(row.apr).toBe(1.2e-7)
+  expect(row.sharePrice).toBe(2000)
+  for (const apr of [
+    'Infinity',
+    'NaN',
+    '1e9999',
+    '1.2E-7garbage',
+    '1e',
+    '',
+    '0x10',
+  ])
+    expect(() =>
+      parseDay({...vaultDay('2026-10-27'), apr}, VAULT_FIELDS),
+    ).toThrow()
+})
+
 test('subgraph pages require strict deterministic date ordering after the checkpoint', () => {
   const rows = [chainDay('2026-10-26'), chainDay('2026-10-27')]
   expect(parsePage(rows, CHAIN_FIELDS, '2026-10-25')).toHaveLength(2)

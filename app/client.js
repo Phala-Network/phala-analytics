@@ -62,7 +62,7 @@ const STREAMS = {
   ],
 }
 
-// Charts whose values the upstream recomputes for backfilled days (Amendment 1).
+// Historical user and running VM counts are recomputed from current status.
 const BACKFILL_AFFECTED = new Set(['users', 'vms'])
 
 const status = document.getElementById('status')

@@ -214,7 +214,7 @@ for (const mode of [
     assert.equal(response.status, 200)
     const data = record(await response.json())
     assert.ok(Array.isArray(data.chainCirculation))
-    assert.equal(data.chainCirculation.length, mode === 'pagination' ? 1002 : 4)
+    assert.equal(data.chainCirculation.length, mode === 'pagination' ? 1003 : 4)
     assert.ok(Array.isArray(data.vault))
     assert.equal(record(data.vault.at(-1)).totalAssets, 100)
     assert.equal(record(data.vault.at(-1)).settlementTotalAssets, 99)
@@ -246,6 +246,16 @@ for (const mode of [
       mode === 'unreviewed' ? 503 : 200,
     )
     if (mode === 'unreviewed') continue
+    if (mode === 'pagination') {
+      assert.equal(
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM circulation_day WHERE chain = 'ethereum'",
+          )
+          .first<number>('count'),
+        1001,
+      )
+    }
     const states = async () =>
       (
         await db
@@ -259,14 +269,6 @@ for (const mode of [
     )
     assert.deepEqual(await states(), before)
     if (mode === 'pagination') {
-      assert.equal(
-        await db
-          .prepare(
-            "SELECT COUNT(*) AS count FROM circulation_day WHERE chain = 'ethereum'",
-          )
-          .first<number>('count'),
-        1001,
-      )
       const calls: unknown = await (
         await stubs.fetch('https://control.test')
       ).json()
