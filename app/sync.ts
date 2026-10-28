@@ -9,6 +9,7 @@ import {
   selectCloudRows,
   shiftDate,
 } from './data'
+import {USER_AGENT} from './http'
 import {
   dayQuery,
   ENTITIES,
@@ -69,10 +70,13 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
     init?: RequestInit,
     timeout = 30_000,
   ) => {
+    const headers = new Headers(init?.headers)
+    headers.set('User-Agent', USER_AGENT)
     let response: Response
     try {
       response = await request(url, {
         ...init,
+        headers,
         redirect: 'manual',
         signal: AbortSignal.timeout(timeout),
       })

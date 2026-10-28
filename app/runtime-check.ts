@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs'
 import {convertV4MiniflareOptions, Miniflare} from 'miniflare'
 import {record, shiftDate} from './data'
 import {chainDay, claimDay, dailyCloud, vaultDay} from './fixtures'
+import {USER_AGENT} from './http'
 import {CHAIN_FIELDS, fields, parseDay} from './subgraph'
 
 // Miniflare's undici dispatcher needs Node rather than Bun's fetch implementation.
@@ -78,7 +79,7 @@ for (const mode of [
             return Response.json(calls)
           }
           const body = await request.text()
-          calls.push({url: request.url, body})
+          calls.push({url: request.url, body, userAgent: request.headers.get('User-Agent')})
           const failure = (status) => new Response('Upstream failed', {status, headers: {Location: 'https://not-followed.test/'}})
           if (env.MODE === 'redirect') return failure(302)
           if (env.MODE === 'server') return failure(503)
@@ -170,6 +171,13 @@ for (const mode of [
       503,
     )
     const result = await worker.scheduled({cron: '17 * * * *', scheduledTime})
+    const calls: unknown = await (
+      await stubs.fetch('https://control.test')
+    ).json()
+    assert.ok(Array.isArray(calls))
+    for (const call of calls) {
+      assert.equal(record(call).userAgent, USER_AGENT, 'Outbound User-Agent')
+    }
     const failed = !['ok', 'pagination', 'unreviewed'].includes(mode)
     assert.equal(
       result.outcome,
@@ -197,10 +205,6 @@ for (const mode of [
           .first<number>('count'),
         0,
       )
-      const calls: unknown = await (
-        await stubs.fetch('https://control.test')
-      ).json()
-      assert.ok(Array.isArray(calls))
       assert.ok(
         calls.every(
           (call) => !String(record(call).url).includes('not-followed.test'),
