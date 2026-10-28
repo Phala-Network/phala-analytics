@@ -4,6 +4,7 @@ import {
   cloudWindow,
   dailyPrices,
   FIRST_CLOUD_DATE,
+  priceUrls,
   realtimeRow,
   record,
   selectCloudRows,
@@ -101,7 +102,9 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
     try {
       await run()
     } catch (error) {
-      console.error(`Analytics sync failed: ${stream}`, error)
+      console.error(
+        `Analytics sync failed: ${stream}: ${error instanceof Error ? error.message : String(error)}`,
+      )
       failures.push(error)
     }
   }
@@ -266,21 +269,10 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
     const first = rows[0]
     const last = rows.at(-1)
     if (!first || !last) return
-    const url = new URL(
-      'https://api.coingecko.com/api/v3/coins/pha/market_chart/range',
-    )
-    url.searchParams.set('vs_currency', 'usd')
-    url.searchParams.set(
-      'from',
-      String(Date.parse(`${first.date}T00:00:00Z`) / 1000),
-    )
-    url.searchParams.set(
-      'to',
-      String(Date.parse(`${shiftDate(last.date)}T00:00:00Z`) / 1000),
-    )
-    const prices = dailyPrices(
-      await json(await checkedFetch(url.toString(), 'PHA price')),
-    )
+    const pages: unknown[] = []
+    for (const url of priceUrls(first.date, last.date))
+      pages.push(await json(await checkedFetch(url.toString(), 'PHA price')))
+    const prices = dailyPrices(pages)
     const priced = rows.map((row) => {
       const price = prices.get(row.date)
       if (price == null) throw new Error(`PHA price missing ${row.date}`)

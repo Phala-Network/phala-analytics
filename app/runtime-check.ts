@@ -19,6 +19,9 @@ const token = (amount: number) => String(BigInt(amount) * 10n ** 18n)
 for (const mode of [
   'ok',
   'pagination',
+  'price-pagination',
+  'price-missing',
+  'price-server',
   'redirect',
   'server',
   'page-redirect',
@@ -30,6 +33,8 @@ for (const mode of [
   'invalid-page',
   'unreviewed',
 ]) {
+  const cloudDays = mode === 'price-pagination' ? 21 : 2
+  const firstCloud = shiftDate(yesterday, 1 - cloudDays)
   const ethereum =
     mode === 'pagination'
       ? Array.from({length: 1001}, (_, i) =>
@@ -60,10 +65,9 @@ for (const mode of [
           compatibilityDate: '2026-10-23',
           bindings: {
             MODE: mode,
-            CLOUD: [
-              dailyCloud(shiftDate(yesterday, -1)),
-              dailyCloud(yesterday),
-            ],
+            CLOUD: Array.from({length: cloudDays}, (_, i) =>
+              dailyCloud(shiftDate(firstCloud, i)),
+            ),
             DATE: today,
             ETHEREUM: ethereum,
             VAULT: [vaultDay(yesterday), vaultDay(today)],
@@ -88,9 +92,17 @@ for (const mode of [
             if (request.headers.get('Authorization') !== 'Bearer test-cloud-key') return failure(401)
             return Response.json({data: env.CLOUD})
           }
-          if (url.pathname.endsWith('/market_chart/range')) return Response.json({prices: env.CLOUD.flatMap((row) => [
-            [Date.parse(row.date + 'T00:00:00Z'), 1], [Date.parse(row.date + 'T23:00:00Z'), 3],
-          ])})
+          if (url.hostname === 'coins.llama.fi' && url.pathname === '/chart/coingecko:pha') {
+            if (env.MODE === 'price-server') return failure(429)
+            const start = Number(url.searchParams.get('start'))
+            const span = Number(url.searchParams.get('span'))
+            if (url.searchParams.get('period') !== '1h' || !Number.isSafeInteger(start) || !Number.isSafeInteger(span) || span < 1 || span > 500) return failure(400)
+            const prices = Array.from({length: span}, (_, hour) => {
+              const timestamp = start + hour * 3600
+              return {timestamp, price: new Date(timestamp * 1000).getUTCHours() < 20 ? 1 : 7}
+            }).filter((point) => env.MODE !== 'price-missing' || new Date(point.timestamp * 1000).toISOString().slice(0, 10) !== env.CLOUD.at(-1).date)
+            return Response.json({coins: {'coingecko:pha': {prices}}})
+          }
           if (url.hostname !== 'ethereum.test') return failure(500)
           const chain = 'ethereum'
           const {query, variables} = JSON.parse(body)
@@ -136,7 +148,7 @@ for (const mode of [
       .prepare(
         "INSERT INTO cloud_daily VALUES (?, 90, 10, 5, 20, NULL, NULL, 1, 12000, 'archive')",
       )
-      .bind(shiftDate(yesterday, -2))
+      .bind(shiftDate(firstCloud, -1))
       .run()
     if (mode === 'write-fail') {
       const columns = [...fields(CHAIN_FIELDS), 'chain']
@@ -178,7 +190,12 @@ for (const mode of [
     for (const call of calls) {
       assert.equal(record(call).userAgent, USER_AGENT, 'Outbound User-Agent')
     }
-    const failed = !['ok', 'pagination', 'unreviewed'].includes(mode)
+    const failed = ![
+      'ok',
+      'pagination',
+      'price-pagination',
+      'unreviewed',
+    ].includes(mode)
     assert.equal(
       result.outcome,
       failed ? 'exception' : 'ok',
@@ -187,6 +204,53 @@ for (const mode of [
     const checkpoint = await db
       .prepare("SELECT value FROM sync_state WHERE key = 'deployment:ethereum'")
       .first<string>('value')
+    const priceCalls = calls
+      .map((call) => new URL(String(record(call).url)))
+      .filter((url) => url.hostname === 'coins.llama.fi')
+    if (
+      ['ok', 'price-pagination', 'price-missing', 'price-server'].includes(mode)
+    ) {
+      assert.deepEqual(
+        priceCalls.map((url) => ({
+          path: url.pathname,
+          query: Object.fromEntries(url.searchParams),
+        })),
+        Array.from({length: Math.ceil((cloudDays * 24) / 500)}, (_, page) => ({
+          path: '/chart/coingecko:pha',
+          query: {
+            start: String(
+              Date.parse(`${firstCloud}T00:00:00Z`) / 1000 + page * 500 * 3600,
+            ),
+            span: String(Math.min(500, cloudDays * 24 - page * 500)),
+            period: '1h',
+          },
+        })),
+      )
+      assert.equal(
+        await db
+          .prepare("SELECT captured FROM cloud_daily WHERE source = 'archive'")
+          .first<number>('captured'),
+        12000,
+      )
+      assert.equal(
+        await db
+          .prepare("SELECT pha_usd FROM cloud_daily WHERE source = 'archive'")
+          .first<number>('pha_usd'),
+        1,
+      )
+    }
+    if (mode === 'price-missing' || mode === 'price-server') {
+      assert.equal(checkpoint, 'ethereum-v1')
+      assert.equal(
+        await db
+          .prepare(
+            'SELECT COUNT(*) AS count FROM cloud_daily WHERE captured IS NULL AND pha_usd IS NULL',
+          )
+          .first<number>('count'),
+        cloudDays,
+      )
+      continue
+    }
     if (failed) {
       assert.equal(
         checkpoint,
@@ -272,6 +336,18 @@ for (const mode of [
       'ok',
     )
     assert.deepEqual(await states(), before)
+    const retriedCalls: unknown = await (
+      await stubs.fetch('https://control.test')
+    ).json()
+    assert.ok(Array.isArray(retriedCalls))
+    assert.equal(
+      retriedCalls.filter(
+        (call) =>
+          new URL(String(record(call).url)).hostname === 'coins.llama.fi',
+      ).length,
+      priceCalls.length,
+      'Priced rows do not fetch prices again',
+    )
     if (mode === 'pagination') {
       const calls: unknown = await (
         await stubs.fetch('https://control.test')
@@ -358,7 +434,7 @@ for (const mode of [
       await db
         .prepare('SELECT COUNT(*) AS count FROM cloud_daily')
         .first<number>('count'),
-      3,
+      cloudDays + 1,
     )
     const sunday = new Date(scheduledTime)
     sunday.setUTCDate(sunday.getUTCDate() - sunday.getUTCDay())
@@ -386,5 +462,5 @@ for (const mode of [
   }
 }
 console.log(
-  'workerd: incremental fills, idempotency, deployment reloads, rollback, HTTP failures, review flags, R2 export and endpoints verified',
+  'workerd: incremental fills, price paging and missing days, idempotency, deployment reloads, rollback, HTTP failures, review flags, R2 export and endpoints verified',
 )
