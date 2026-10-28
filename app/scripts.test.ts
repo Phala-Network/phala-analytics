@@ -48,7 +48,7 @@ test('comparison enforces source counts/latest totals and exact archived Cloud v
   expect(() => compare(wrongCaptured, data, exported)).toThrow('captured')
   const preSeries = structuredClone(data)
   preSeries.chainCirculation.push({
-    ...parseDay(chainDay('2021-02-07'), CHAIN_FIELDS),
+    ...parseDay(chainDay('2020-08-31'), CHAIN_FIELDS),
     chain: 'ethereum',
   })
   expect(() => compare(preSeries, preSeries, exported)).toThrow(
