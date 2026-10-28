@@ -1,4 +1,5 @@
 import {finiteNumber, record, shiftDate, utcDate} from './data'
+import {USER_AGENT} from './http'
 
 export const PAGE_SIZE = 1000
 
@@ -200,7 +201,7 @@ export const graphql = async (
   try {
     response = await request(url, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'User-Agent': USER_AGENT},
       body: JSON.stringify({query, variables}),
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
