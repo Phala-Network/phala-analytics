@@ -1,4 +1,9 @@
-import {type AnalyticsData, DAY_MS, realtimeRow} from './data'
+import {
+  type AnalyticsData,
+  CIRCULATION_SERIES_START,
+  DAY_MS,
+  realtimeRow,
+} from './data'
 import {ASSETS, UPLOT_SCRIPT, UPLOT_STYLE} from './page'
 import type {ChainDay, VaultDay} from './subgraph'
 import {sync} from './sync'
@@ -22,7 +27,8 @@ export const analyticsData = async (
       db.prepare(
         "SELECT key, value FROM sync_state WHERE key IN ('realtime', 'subgraph:ethereum')",
       ),
-      db.prepare(`
+      db
+        .prepare(`
       WITH dates AS (
         SELECT date FROM circulation_day WHERE chain = 'ethereum'
         UNION SELECT date FROM legacy_circulation_day
@@ -31,11 +37,15 @@ export const analyticsData = async (
       )
       SELECT date, ethereum, phala, khala,
         COALESCE(ethereum, 0) + COALESCE(phala, 0) + COALESCE(khala, 0) AS total
-      FROM dates LEFT JOIN ethereum USING (date) LEFT JOIN legacy_circulation_day USING (date) ORDER BY date
-    `),
-      db.prepare(
-        "SELECT * FROM circulation_day WHERE chain = 'ethereum' ORDER BY date",
-      ),
+      FROM dates LEFT JOIN ethereum USING (date) LEFT JOIN legacy_circulation_day USING (date)
+      WHERE date >= ?1 ORDER BY date
+    `)
+        .bind(CIRCULATION_SERIES_START),
+      db
+        .prepare(
+          "SELECT * FROM circulation_day WHERE chain = 'ethereum' AND date >= ? ORDER BY date",
+        )
+        .bind(CIRCULATION_SERIES_START),
       db.prepare('SELECT * FROM vault_day ORDER BY date'),
       db.prepare('SELECT * FROM claim_day ORDER BY date'),
       db.prepare(`
@@ -83,10 +93,16 @@ export const analyticsData = async (
   }
 }
 
+// Cloudflare Web Analytics (automatic setup) injects a versioned beacon at
+// beacon.min.js/<version>; the trailing slash matches that path prefix. Beacons
+// post to this origin's /cdn-cgi/rum, which connect-src 'self' covers.
+const WEB_ANALYTICS_SCRIPT =
+  'https://static.cloudflareinsights.com/beacon.min.js/'
+
 const PAGE_HEADERS = {
   'Content-Security-Policy': [
     "default-src 'none'",
-    `script-src 'self' ${UPLOT_SCRIPT}`,
+    `script-src 'self' ${UPLOT_SCRIPT} ${WEB_ANALYTICS_SCRIPT}`,
     `style-src 'self' ${UPLOT_STYLE}`,
     "connect-src 'self'",
     "img-src 'self'",

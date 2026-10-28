@@ -46,6 +46,14 @@ test('comparison enforces source counts/latest totals and exact archived Cloud v
   if (!row) throw new Error('Missing fixture')
   row.captured += 0.0001
   expect(() => compare(wrongCaptured, data, exported)).toThrow('captured')
+  const preSeries = structuredClone(data)
+  preSeries.chainCirculation.push({
+    ...parseDay(chainDay('2020-08-31'), CHAIN_FIELDS),
+    chain: 'ethereum',
+  })
+  expect(() => compare(preSeries, preSeries, exported)).toThrow(
+    'precedes the circulation series',
+  )
   const wrongDeployment = structuredClone(data)
   wrongDeployment.subgraphs.ethereum.deployment = 'other'
   expect(() => compare(wrongDeployment, data, exported)).toThrow('deployment')
