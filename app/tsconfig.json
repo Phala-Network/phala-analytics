@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "types": ["bun"]
+  },
+  "include": ["./**/*.ts", "./.cloudflare/types"],
+  "exclude": ["node_modules"]
+}
