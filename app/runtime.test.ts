@@ -53,7 +53,10 @@ test('analytics runs in real workerd with migrated local D1 and isolated upstrea
       if (exitCode !== 0)
         throw new Error(`workerd check failed:\n${stdout}\n${stderr}`)
       expect(stdout).toContain(
-        'workerd: incremental fills, idempotency, deployment reloads, rollback, HTTP failures, review flags, R2 export and endpoints verified',
+        'workerd: incremental fills, price paging and missing days, idempotency, deployment reloads, rollback, HTTP failures, review flags, R2 export and endpoints verified',
+      )
+      expect(`${stdout}\n${stderr}`).toContain(
+        'Analytics sync failed: price: PHA price: HTTP 429',
       )
     } finally {
       clearTimeout(timeout)

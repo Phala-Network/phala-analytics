@@ -124,28 +124,42 @@ export const captured = (totalVcpu: number, price: number) => {
   return finiteNumber((totalVcpu * 12 * 50) / price)
 }
 
-export const dailyPrices = (value: unknown): Map<string, number> => {
-  const {prices} = record(value)
-  if (!Array.isArray(prices)) throw new Error('Expected CoinGecko prices')
+export const priceUrls = (first: string, last: string): URL[] => {
+  const start = Date.parse(`${utcDate(first)}T00:00:00Z`) / 1000
+  const end = Date.parse(`${shiftDate(last)}T00:00:00Z`) / 1000
+  const urls: URL[] = []
+  for (let time = start; time < end; time += 500 * 3600) {
+    const url = new URL('https://coins.llama.fi/chart/coingecko:pha')
+    url.searchParams.set('start', String(time))
+    url.searchParams.set('span', String(Math.min(500, (end - time) / 3600)))
+    url.searchParams.set('period', '1h')
+    urls.push(url)
+  }
+  return urls
+}
+
+export const dailyPrices = (pages: unknown[]): Map<string, number> => {
   const days = new Map<string, {sum: number; count: number}>()
-  for (const point of prices) {
-    if (!Array.isArray(point) || point.length !== 2)
-      throw new Error('Invalid price point')
-    const [time, price] = point
-    if (
-      typeof time !== 'number' ||
-      !Number.isSafeInteger(time) ||
-      time < 0 ||
-      typeof price !== 'number' ||
-      !Number.isFinite(price) ||
-      price <= 0
-    )
-      throw new Error('Invalid price point')
-    const date = new Date(time).toISOString().slice(0, 10)
-    const day = days.get(date) ?? {sum: 0, count: 0}
-    day.sum += price
-    day.count++
-    days.set(date, day)
+  for (const page of pages) {
+    const {prices} = record(record(record(page).coins)['coingecko:pha'])
+    if (!Array.isArray(prices)) throw new Error('Expected DefiLlama prices')
+    for (const point of prices) {
+      const {timestamp: time, price} = record(point)
+      if (
+        typeof time !== 'number' ||
+        !Number.isSafeInteger(time) ||
+        time < 0 ||
+        typeof price !== 'number' ||
+        !Number.isFinite(price) ||
+        price <= 0
+      )
+        throw new Error('Invalid price point')
+      const date = new Date(time * 1000).toISOString().slice(0, 10)
+      const day = days.get(date) ?? {sum: 0, count: 0}
+      day.sum += price
+      day.count++
+      days.set(date, day)
+    }
   }
   return new Map([...days].map(([date, {sum, count}]) => [date, sum / count]))
 }

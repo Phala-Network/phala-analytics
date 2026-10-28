@@ -4,8 +4,10 @@ import {
   cloudSource,
   cloudWindow,
   dailyPrices,
+  priceUrls,
   realtimeRow,
   selectCloudRows,
+  shiftDate,
   utcDate,
 } from './data'
 import {chainDay, claimDay, dailyCloud, vaultDay} from './fixtures'
@@ -60,19 +62,100 @@ test('captured uses annual vCPU revenue divided by positive PHA price', () => {
     expect(() => captured(10, price)).toThrow()
 })
 
-test('price averages use UTC boundaries, with invalid points rejected', () => {
-  const prices = dailyPrices({
-    prices: [
-      [Date.parse('2026-10-25T00:00:00Z'), 1],
-      [Date.parse('2026-10-25T23:59:59Z'), 3],
-      [Date.parse('2026-10-26T00:00:00Z'), 4],
-    ],
-  })
+const pricePage = (prices: unknown) => ({
+  coins: {'coingecko:pha': {prices}},
+})
+
+test('DefiLlama hourly prices use Unix seconds and UTC daily means', () => {
+  const prices = dailyPrices([
+    pricePage([
+      {timestamp: Date.parse('2026-10-25T00:00:00Z') / 1000, price: 1},
+      {timestamp: Date.parse('2026-10-25T23:59:59Z') / 1000, price: 3},
+      {timestamp: Date.parse('2026-10-26T00:00:00Z') / 1000, price: 4},
+    ]),
+  ])
   expect([...prices]).toEqual([
     ['2026-10-25', 2],
     ['2026-10-26', 4],
   ])
-  expect(() => dailyPrices({prices: [[0, 0]]})).toThrow()
+})
+
+test('DefiLlama rejects malformed responses, timestamps and nonpositive prices', () => {
+  for (const page of [
+    null,
+    {},
+    {coins: {}},
+    {coins: {'coingecko:pha': null}},
+    pricePage(null),
+    pricePage({}),
+  ])
+    expect(() => dailyPrices([page])).toThrow()
+  for (const point of [
+    null,
+    [0, 1],
+    {},
+    ...[-1, 1.5, '1792886400', Number.NaN, Number.MAX_SAFE_INTEGER].map(
+      (timestamp) => ({timestamp, price: 1}),
+    ),
+    ...[0, -1, '1', Number.NaN, Number.POSITIVE_INFINITY].map((price) => ({
+      timestamp: 1792886400,
+      price,
+    })),
+  ])
+    expect(() => dailyPrices([pricePage([point])])).toThrow()
+  expect([...dailyPrices([pricePage([])])]).toEqual([])
+})
+
+test('DefiLlama requests consecutive pages of at most 500 hours through the last UTC day', () => {
+  const start = Date.parse('2026-10-01T00:00:00Z') / 1000
+  const urls = priceUrls('2026-10-01', '2026-10-21')
+  expect(
+    urls.map((url) => ({
+      origin: url.origin,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+    })),
+  ).toEqual([
+    {
+      origin: 'https://coins.llama.fi',
+      path: '/chart/coingecko:pha',
+      query: {start: String(start), span: '500', period: '1h'},
+    },
+    {
+      origin: 'https://coins.llama.fi',
+      path: '/chart/coingecko:pha',
+      query: {start: String(start + 500 * 3600), span: '4', period: '1h'},
+    },
+  ])
+  expect(
+    priceUrls('2026-10-01', '2026-10-01')[0]?.searchParams.get('span'),
+  ).toBe('24')
+  const exactPages = priceUrls('2026-01-01', shiftDate('2026-01-01', 124))
+  expect(exactPages).toHaveLength(6)
+  expect(
+    exactPages.every((url) => url.searchParams.get('span') === '500'),
+  ).toBe(true)
+})
+
+test('UTC means combine hourly samples across a page boundary before averaging', () => {
+  const start = Date.parse('2026-10-01T00:00:00Z') / 1000
+  const prices = dailyPrices([
+    pricePage(
+      Array.from({length: 500}, (_, hour) => ({
+        timestamp: start + hour * 3600,
+        price: 1,
+      })),
+    ),
+    pricePage(
+      Array.from({length: 4}, (_, hour) => ({
+        timestamp: start + (500 + hour) * 3600,
+        price: 7,
+      })),
+    ),
+  ])
+  expect(prices.size).toBe(21)
+  expect(prices.get('2026-10-20')).toBe(1)
+  expect(prices.get('2026-10-21')).toBe(2)
 })
 
 test('subgraph days convert wei, retain false implementation flags and separate flow dates', () => {
