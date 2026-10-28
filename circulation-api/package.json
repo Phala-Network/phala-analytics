@@ -9,14 +9,14 @@
     "check": "biome ci ."
   },
   "dependencies": {
-    "@vercel/functions": "^3.9.9",
-    "hono": "^4.3.4"
+    "@vercel/functions": "3.9.9",
+    "hono": "4.3.4"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
-    "@types/bun": "^1.1.1",
-    "typescript": "^5",
-    "vercel": "^34.1.9"
+    "@types/bun": "1.1.1",
+    "typescript": "5.9.3",
+    "vercel": "34.1.9"
   },
   "packageManager": "bun@1.4.2",
   "engines": {

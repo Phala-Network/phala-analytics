@@ -37,16 +37,16 @@ separate bridged-chain indexer or API request. Verify the subgraph uses this
 formula before deploying the API.
 
 The circulation API runs on Node.js 24.x, pinned by `engines.node` in
-`package.json`. Vercel uses that pin; CI reads the same value before running
+`circulation-api/package.json`. Vercel uses that pin; CI reads the same value before running
 the Bun toolchain.
 
 Code and component-specific commands:
 
-- [Subgraphs](https://github.com/Phala-Network/phala-subgraphs):
+- [Subgraphs](../subgraph/README.md):
   manifests, mappings, ABI review, builds, deploy commands and parity verifier.
-- [Analytics Worker](https://github.com/Phala-Network/scripts-toolbox/tree/main/workers/phala-analytics):
+- [Analytics Worker](../app/README.md):
   refresh, cache schema, archive seeding, exports, deployment and secrets.
-- [Circulation API contract](../README.md): endpoint shapes, date convention,
+- [Circulation API contract](../circulation-api/README.md): endpoint shapes, date convention,
   cache headers and environment variables.
 
 ## Consumers
@@ -92,7 +92,7 @@ deleting a version. These limits also apply during rollback.
    getters, update the allowlist/formula dispatch, and rebuild. Do not simply
    override `vaultImplementationReviewed`.
 2. Check deployment slots, worker-hours and entity budget. Build and deploy
-   one replacement version using the subgraph repository's commands. Full
+   one replacement version using the subgraph package's commands. Full
    historical mappings need a full sync; a short-range feature test cannot
    validate historical balances.
 3. Wait for sync. Query `Latest(id: "current")` and `_meta`: no indexing

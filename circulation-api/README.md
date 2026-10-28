@@ -1,7 +1,7 @@
 # pha-circulation-server
 
 PHA circulating supply API on Vercel (`phala/pha-circulation-server`, Node.js).
-Reads the [`phala-ethereum` Goldsky subgraph](https://github.com/Phala-Network/phala-subgraphs);
+Reads the [`phala-ethereum` Goldsky subgraph](../subgraph/README.md);
 no RPC is used.
 
 ## API contract
@@ -120,12 +120,12 @@ Use Node.js **24.x** and Bun **1.4.2**. Vercel and CI read the Node runtime
 from `package.json` (`engines.node`). Biome is pinned exactly; the text
 `bun.lock` is authoritative.
 
+Run from the repository root:
+
 ```bash
 bun install --frozen-lockfile
-bun run typecheck
-bun test
-bun run check
-bun run start
+bun run verify:circulation-api
+bun run --cwd circulation-api start
 ```
 
 Tests use mocked GraphQL and production response fixtures recorded in
@@ -133,5 +133,5 @@ Tests use mocked GraphQL and production response fixtures recorded in
 documented null fields), Portal accounting, plain-number formatting, errors, CORS, caching, and the midnight
 convention.
 
-See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the stack's consumers, data
+See [docs/OPERATIONS.md](../docs/OPERATIONS.md) for the stack's consumers, data
 flow, upgrade and recovery runbooks, free allowance, and archives.

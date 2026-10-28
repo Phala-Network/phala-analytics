@@ -8,7 +8,7 @@ the Clock polls every 25 blocks after its configured start block.
 Consumers use the `prod` tag:
 `https://api.goldsky.com/api/public/project_cmdgxxcewrqdi01wx9e7md0ek/subgraphs/phala-ethereum/prod/gn`.
 See the circulation server's
-[operations guide](https://github.com/Phala-Network/pha-circulation-server/blob/main/docs/OPERATIONS.md)
+[operations guide](../docs/OPERATIONS.md)
 for the wider stack.
 
 ## Data reference
@@ -153,6 +153,7 @@ text `bun.lock`.
 
 ```bash
 bun install --frozen-lockfile
+cd subgraph
 bun run codegen       # ethereum.yaml bindings
 bun run build         # build/ethereum
 bun run test          # matchstick 0.6.0
