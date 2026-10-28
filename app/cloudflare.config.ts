@@ -6,6 +6,7 @@ export default defineConfig(({mode}) => ({
     entrypoint: './index.ts',
     compatibilityDate: '2026-10-23',
     workersDev: false,
+    domains: ['analytics.phala.network'],
     observability: {enabled: true},
     env: {
       DB: bindings.d1({
