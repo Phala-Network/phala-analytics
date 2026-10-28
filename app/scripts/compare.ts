@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {finiteNumber, record, utcDate} from '../data'
+import {CIRCULATION_SERIES_START, finiteNumber, record, utcDate} from '../data'
 import {
   dayQuery,
   ENTITIES,
@@ -43,6 +43,11 @@ export const compare = (
   const actualCirculation = datedRows(data.chainCirculation)
   const expectedCirculation = datedRows(expected.chainCirculation)
   assert.ok(expectedCirculation.size > 0, 'Ethereum subgraph has no daily rows')
+  for (const date of actualCirculation.keys())
+    assert.ok(
+      date >= CIRCULATION_SERIES_START,
+      `Ethereum ${date} precedes the circulation series`,
+    )
   assert.equal(
     actualCirculation.size,
     expectedCirculation.size,
@@ -153,9 +158,12 @@ export const subgraphSnapshot = async (url: string) => {
         'Subgraph changed during comparison; retry',
       )
       const rows = parsePage(data.rows, spec, after)
+      // The API serves circulation from CIRCULATION_SERIES_START only.
       if (table === 'circulation_day')
         snapshot.chainCirculation.push(
-          ...rows.map((row) => ({...row, chain: 'ethereum'})),
+          ...rows
+            .filter((row) => row.date >= CIRCULATION_SERIES_START)
+            .map((row) => ({...row, chain: 'ethereum'})),
         )
       else if (table === 'vault_day') snapshot.vault.push(...rows)
       else snapshot.claims.push(...rows)

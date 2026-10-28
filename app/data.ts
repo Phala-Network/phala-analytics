@@ -1,5 +1,8 @@
 export const DAY_MS = 86_400_000
 export const FIRST_CLOUD_DATE = '2024-11-29'
+// The official circulation series starts here. Earlier formula output is not
+// meaningful; those stored rows are kept but not served.
+export const CIRCULATION_SERIES_START = '2021-02-08'
 
 export const record = (value: unknown): Record<string, unknown> => {
   if (value == null || typeof value !== 'object' || Array.isArray(value))

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {convertV4MiniflareOptions, Miniflare} from 'miniflare'
-import {record, shiftDate} from './data'
+import {CIRCULATION_SERIES_START, record, shiftDate} from './data'
 import {chainDay, claimDay, dailyCloud, vaultDay} from './fixtures'
 import {USER_AGENT} from './http'
 import {CHAIN_FIELDS, fields, parseDay} from './subgraph'
@@ -150,23 +150,23 @@ for (const mode of [
       )
       .bind(shiftDate(firstCloud, -1))
       .run()
-    if (mode === 'write-fail') {
+    const insertChainDay = async (date: string) => {
       const columns = [...fields(CHAIN_FIELDS), 'chain']
-      const old = {
-        ...parseDay(chainDay('2000-01-01'), CHAIN_FIELDS),
-        chain: 'ethereum',
-      }
+      const row = {...parseDay(chainDay(date), CHAIN_FIELDS), chain: 'ethereum'}
       await db
         .prepare(
           `INSERT INTO circulation_day (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
         )
         .bind(
           ...columns.map((key) => {
-            const value = record(old)[key]
+            const value = record(row)[key]
             return typeof value === 'boolean' ? Number(value) : value
           }),
         )
         .run()
+    }
+    if (mode === 'write-fail') {
+      await insertChainDay('2000-01-01')
       await db
         .prepare(
           "INSERT INTO sync_state VALUES ('deployment:ethereum', 'old', '2000-01-01T00:00:00Z')",
@@ -277,12 +277,22 @@ for (const mode of [
       continue
     }
     assert.equal(checkpoint, 'ethereum-v1')
+    // Stored rows before the circulation series start are kept but not served.
+    const preSeries = shiftDate(CIRCULATION_SERIES_START, -1)
+    await insertChainDay(preSeries)
+    await db
+      .prepare('INSERT INTO legacy_circulation_day VALUES (?, 5, 6)')
+      .bind(preSeries)
+      .run()
     const response = await worker.fetch('https://analytics.test/api/data')
     assert.equal(response.status, 200)
     const data = record(await response.json())
     assert.deepEqual(Object.keys(record(data.subgraphs)), ['ethereum'])
     assert.ok(Array.isArray(data.chainCirculation))
     assert.equal(data.chainCirculation.length, mode === 'pagination' ? 1001 : 2)
+    assert.ok(Array.isArray(data.circulation))
+    for (const row of [...data.chainCirculation, ...data.circulation])
+      assert.ok(String(record(row).date) >= CIRCULATION_SERIES_START)
     assert.ok(Array.isArray(data.vault))
     assert.equal(record(data.vault.at(-1)).totalAssets, 100)
     assert.equal(record(data.vault.at(-1)).settlementTotalAssets, 99)
@@ -321,7 +331,7 @@ for (const mode of [
             "SELECT COUNT(*) AS count FROM circulation_day WHERE chain = 'ethereum'",
           )
           .first<number>('count'),
-        1001,
+        1002,
       )
     }
     const states = async () =>
@@ -428,7 +438,7 @@ for (const mode of [
       await db
         .prepare('SELECT COUNT(*) AS count FROM legacy_circulation_day')
         .first<number>('count'),
-      1,
+      2,
     )
     assert.equal(
       await db
