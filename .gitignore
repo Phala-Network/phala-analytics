@@ -1,0 +1,10 @@
+node_modules/
+.cloudflare/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+.secrets*
+*.sqlite
+*.tsbuildinfo
+.DS_Store
