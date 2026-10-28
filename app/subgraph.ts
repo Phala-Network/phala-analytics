@@ -1,7 +1,5 @@
 import {finiteNumber, record, shiftDate, utcDate} from './data'
 
-export type Chain = 'ethereum' | 'base'
-export const CHAINS: Chain[] = ['ethereum', 'base']
 export const PAGE_SIZE = 1000
 
 // Names match the immutable subgraph entities and their D1 cache columns.
@@ -91,7 +89,7 @@ export type EntityRow<F extends Fields> = {date: string} & {
 } & {[K in F['booleans'][number]]: boolean} & (F['status'] extends true
     ? Status
     : unknown)
-export type ChainDay = EntityRow<typeof CHAIN_FIELDS> & {chain: Chain}
+export type ChainDay = EntityRow<typeof CHAIN_FIELDS> & {chain: 'ethereum'}
 export type VaultDay = EntityRow<typeof VAULT_FIELDS>
 export type ClaimDay = EntityRow<typeof CLAIM_FIELDS>
 

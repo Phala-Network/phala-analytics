@@ -12,12 +12,10 @@ const exported = {results: {'4614059': {rows: cloud}}}
 const data = {
   subgraphs: {
     ethereum: {deployment: 'ethereum-v1'},
-    base: {deployment: 'base-v1'},
   },
-  chainCirculation: ['ethereum', 'base'].map((chain) => ({
-    ...parseDay(chainDay('2026-10-27', chain), CHAIN_FIELDS),
-    chain,
-  })),
+  chainCirculation: [
+    {...parseDay(chainDay('2026-10-27'), CHAIN_FIELDS), chain: 'ethereum'},
+  ],
   vault: [parseDay(vaultDay('2026-10-27'), VAULT_FIELDS)],
   claims: [parseDay(claimDay('2026-10-27'), CLAIM_FIELDS)],
   cloud: cloud.map((row) => ({

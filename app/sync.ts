@@ -10,7 +10,6 @@ import {
   shiftDate,
 } from './data'
 import {
-  CHAINS,
   dayQuery,
   ENTITIES,
   fields,
@@ -116,104 +115,101 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
     ).run()
   })
 
-  for (const chain of CHAINS)
-    await attempt(chain, async () => {
-      const url =
-        chain === 'ethereum' ? env.GOLDSKY_ETHEREUM_URL : env.GOLDSKY_BASE_URL
-      const meta = await graphql(url, META_QUERY, {}, request)
-      const deployment = subgraphMeta(meta)
-      if (record(meta.latest).chain !== chain)
-        throw new Error('Subgraph chain mismatch')
-      const status = latestStatus(meta.latest)
-      const key = `deployment:${chain}`
-      const previous = await db
-        .prepare('SELECT value FROM sync_state WHERE key = ?')
-        .bind(key)
-        .first<string>('value')
-      const changed = previous !== deployment
-      let reset = changed
-      for (const {entity, table, spec} of ENTITIES) {
-        if (chain === 'base' && table !== 'circulation_day') continue
-        let after = changed
-          ? ''
-          : ((await (table === 'circulation_day'
-              ? db
-                  .prepare(
-                    `SELECT MAX(date) AS date FROM ${table} WHERE chain = ?`,
-                  )
-                  .bind(chain)
-              : db.prepare(`SELECT MAX(date) AS date FROM ${table}`)
-            ).first<string>('date')) ?? '')
-        while (true) {
-          const page = await graphql(
-            url,
-            dayQuery(entity, spec),
-            {after},
-            request,
-          )
-          if (subgraphMeta(page) !== deployment)
-            throw new Error('Subgraph deployment changed during sync')
-          const rows = parsePage(page.rows, spec, after)
-          if (
-            table === 'circulation_day' &&
-            Array.isArray(page.rows) &&
-            page.rows.some((row) => record(row).chain !== chain)
-          )
-            throw new Error('Subgraph chain mismatch')
-          const columns = fields(spec)
-          const statements: D1PreparedStatement[] = []
-          if (reset) {
-            statements.push(
-              db
-                .prepare('DELETE FROM circulation_day WHERE chain = ?')
-                .bind(chain),
-            )
-            if (chain === 'ethereum')
-              statements.push(
-                db.prepare('DELETE FROM vault_day'),
-                db.prepare('DELETE FROM claim_day'),
-              )
-            statements.push(stateStatement(db, key, deployment, now))
-          }
-          if (table === 'circulation_day')
-            statements.push(
-              stateStatement(
-                db,
-                `subgraph:${chain}`,
-                JSON.stringify({deployment, ...status}),
-                now,
-              ),
-            )
+  await attempt('ethereum', async () => {
+    const chain = 'ethereum'
+    const url = env.GOLDSKY_ETHEREUM_URL
+    const meta = await graphql(url, META_QUERY, {}, request)
+    const deployment = subgraphMeta(meta)
+    if (record(meta.latest).chain !== chain)
+      throw new Error('Subgraph chain mismatch')
+    const status = latestStatus(meta.latest)
+    const key = `deployment:${chain}`
+    const previous = await db
+      .prepare('SELECT value FROM sync_state WHERE key = ?')
+      .bind(key)
+      .first<string>('value')
+    const changed = previous !== deployment
+    let reset = changed
+    for (const {entity, table, spec} of ENTITIES) {
+      let after = changed
+        ? ''
+        : ((await (table === 'circulation_day'
+            ? db
+                .prepare(
+                  `SELECT MAX(date) AS date FROM ${table} WHERE chain = ?`,
+                )
+                .bind(chain)
+            : db.prepare(`SELECT MAX(date) AS date FROM ${table}`)
+          ).first<string>('date')) ?? '')
+      while (true) {
+        const page = await graphql(
+          url,
+          dayQuery(entity, spec),
+          {after},
+          request,
+        )
+        if (subgraphMeta(page) !== deployment)
+          throw new Error('Subgraph deployment changed during sync')
+        const rows = parsePage(page.rows, spec, after)
+        if (
+          table === 'circulation_day' &&
+          Array.isArray(page.rows) &&
+          page.rows.some((row) => record(row).chain !== chain)
+        )
+          throw new Error('Subgraph chain mismatch')
+        const columns = fields(spec)
+        const statements: D1PreparedStatement[] = []
+        if (reset) {
           statements.push(
-            ...insertStatements(
+            db
+              .prepare('DELETE FROM circulation_day WHERE chain = ?')
+              .bind(chain),
+          )
+          statements.push(
+            db.prepare('DELETE FROM vault_day'),
+            db.prepare('DELETE FROM claim_day'),
+          )
+          statements.push(stateStatement(db, key, deployment, now))
+        }
+        if (table === 'circulation_day')
+          statements.push(
+            stateStatement(
               db,
-              table,
-              table === 'circulation_day' ? [...columns, 'chain'] : columns,
-              rows.map((row) => {
-                const values = columns.map((field): SqlValue => {
-                  const value = record(row)[field]
-                  if (
-                    value === null ||
-                    typeof value === 'string' ||
-                    typeof value === 'number'
-                  )
-                    return value
-                  if (typeof value === 'boolean') return Number(value)
-                  throw new Error('Invalid cache column')
-                })
-                return table === 'circulation_day' ? [...values, chain] : values
-              }),
+              `subgraph:${chain}`,
+              JSON.stringify({deployment, ...status}),
+              now,
             ),
           )
-          // Rebuild/reset, each immutable page, and its MAX(date) checkpoint are atomic.
-          if (statements.length) await db.batch(statements)
-          reset = false
-          const last = rows.at(-1)
-          if (rows.length < PAGE_SIZE || !last) break
-          after = last.date
-        }
+        statements.push(
+          ...insertStatements(
+            db,
+            table,
+            table === 'circulation_day' ? [...columns, 'chain'] : columns,
+            rows.map((row) => {
+              const values = columns.map((field): SqlValue => {
+                const value = record(row)[field]
+                if (
+                  value === null ||
+                  typeof value === 'string' ||
+                  typeof value === 'number'
+                )
+                  return value
+                if (typeof value === 'boolean') return Number(value)
+                throw new Error('Invalid cache column')
+              })
+              return table === 'circulation_day' ? [...values, chain] : values
+            }),
+          ),
+        )
+        // Rebuild/reset, each immutable page, and its MAX(date) checkpoint are atomic.
+        if (statements.length) await db.batch(statements)
+        reset = false
+        const last = rows.at(-1)
+        if (rows.length < PAGE_SIZE || !last) break
+        after = last.date
       }
-    })
+    }
+  })
 
   await attempt('cloud', async () => {
     const lastDate =

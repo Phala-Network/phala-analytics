@@ -153,20 +153,18 @@ export const dailyPrices = (value: unknown): Map<string, number> => {
 export interface AnalyticsData {
   generatedAt: string
   realtime: {totalCirculation: number; timestamp: string}
-  subgraphs: Record<
-    import('./subgraph').Chain,
-    {
+  subgraphs: {
+    ethereum: {
       deployment: string
       timestamp: string
       vaultImplementation: string
       vaultImplementationReviewed: boolean
       accrualMode: string
     } | null
-  >
+  }
   circulation: {
     date: string
     ethereum: number | null
-    base: number | null
     phala: number | null
     khala: number | null
     total: number

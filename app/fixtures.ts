@@ -16,13 +16,13 @@ export const implementation = {
   vaultImplementationReviewed: true,
   accrualMode: 'formula',
 }
-export const chainDay = (date: string, chain = 'ethereum') => ({
+export const chainDay = (date: string) => ({
   ...Object.fromEntries(CHAIN_FIELDS.tokens.map((field) => [field, '0'])),
   ...implementation,
   date,
-  chain,
+  chain: 'ethereum',
   totalSupply: token(1000),
-  circulation: token(chain === 'ethereum' ? 100 : 2),
+  circulation: token(100),
   vaultReward: token(-1),
 })
 export const vaultDay = (date: string) => ({

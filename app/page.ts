@@ -73,6 +73,7 @@ const PAGE = `<!doctype html>
         </dl>
         ${chart('circulation', 'Circulating supply', 'By chain at 00:00 UTC each day, stacked (PHA)')}
       </div>
+      <p class="note">Base PHA is counted through the Ethereum Portal escrow.</p>
     </section>
     <section aria-labelledby="vault">
       <div class="section-head">
@@ -120,7 +121,7 @@ const PAGE = `<!doctype html>
     </section>
   </main>
   <footer>
-    <p class="footer-text">Daily values are UTC days. Sources: Phala subgraphs on Ethereum and Base, archived Phala and Khala chain history, the $PHA circulation API, Phala Cloud usage statistics, and daily PHA prices (Dune through September 22, 2026, CoinGecko after). Data refreshes hourly.</p>
+    <p class="footer-text">Daily values are UTC days. Sources: the Phala Ethereum subgraph, archived Phala and Khala chain history, the $PHA circulation API, Phala Cloud usage statistics, and daily PHA prices (Dune through September 22, 2026, CoinGecko after). Data refreshes hourly.</p>
     <p class="footer-text"><a href="/api/data">Download the data (JSON)</a></p>
   </footer>
 </div>

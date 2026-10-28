@@ -36,7 +36,6 @@ const STREAMS = {
   circulation: [
     {key: 'total', label: 'Total', color: '--text-secondary'},
     {key: 'ethereum', label: 'Ethereum', color: 1, stack: true},
-    {key: 'base', label: 'Base', color: 2, stack: true},
     {key: 'phala', label: 'Phala', color: 3, stack: true},
     {key: 'khala', label: 'Khala', color: 4, stack: true},
   ],

@@ -1,6 +1,6 @@
 import {type AnalyticsData, DAY_MS, realtimeRow} from './data'
 import {ASSETS, UPLOT_SCRIPT, UPLOT_STYLE} from './page'
-import {CHAINS, type ChainDay, type VaultDay} from './subgraph'
+import type {ChainDay, VaultDay} from './subgraph'
 import {sync} from './sync'
 
 type StoredStatus<T> = Omit<T, 'vaultImplementationReviewed'> & {
@@ -20,20 +20,22 @@ export const analyticsData = async (
   const [state, circulation, chainCirculation, vault, claims, cloud] =
     await db.batch<Record<string, unknown>>([
       db.prepare(
-        "SELECT key, value FROM sync_state WHERE key = 'realtime' OR key LIKE 'subgraph:%'",
+        "SELECT key, value FROM sync_state WHERE key IN ('realtime', 'subgraph:ethereum')",
       ),
       db.prepare(`
-      WITH dates AS (SELECT date FROM circulation_day UNION SELECT date FROM legacy_circulation_day),
-      chains AS (
-        SELECT date, MAX(CASE WHEN chain = 'ethereum' THEN circulation END) AS ethereum,
-          MAX(CASE WHEN chain = 'base' THEN circulation END) AS base
-        FROM circulation_day GROUP BY date
+      WITH dates AS (
+        SELECT date FROM circulation_day WHERE chain = 'ethereum'
+        UNION SELECT date FROM legacy_circulation_day
+      ), ethereum AS (
+        SELECT date, circulation AS ethereum FROM circulation_day WHERE chain = 'ethereum'
       )
-      SELECT date, ethereum, base, phala, khala,
-        COALESCE(ethereum, 0) + COALESCE(base, 0) + COALESCE(phala, 0) + COALESCE(khala, 0) AS total
-      FROM dates LEFT JOIN chains USING (date) LEFT JOIN legacy_circulation_day USING (date) ORDER BY date
+      SELECT date, ethereum, phala, khala,
+        COALESCE(ethereum, 0) + COALESCE(phala, 0) + COALESCE(khala, 0) AS total
+      FROM dates LEFT JOIN ethereum USING (date) LEFT JOIN legacy_circulation_day USING (date) ORDER BY date
     `),
-      db.prepare('SELECT * FROM circulation_day ORDER BY date, chain'),
+      db.prepare(
+        "SELECT * FROM circulation_day WHERE chain = 'ethereum' ORDER BY date",
+      ),
       db.prepare('SELECT * FROM vault_day ORDER BY date'),
       db.prepare('SELECT * FROM claim_day ORDER BY date'),
       db.prepare(`
@@ -53,14 +55,13 @@ export const analyticsData = async (
     !cloud
   )
     throw new Error('Analytics has not been synchronized')
-  const subgraph = (chain: string) => {
-    const value = values.get(`subgraph:${chain}`)
-    return typeof value === 'string' ? JSON.parse(value) : null
-  }
+  const subgraph = values.get('subgraph:ethereum')
   return {
     generatedAt: now.toISOString(),
     realtime: realtimeRow(JSON.parse(value)),
-    subgraphs: {ethereum: subgraph('ethereum'), base: subgraph('base')},
+    subgraphs: {
+      ethereum: typeof subgraph === 'string' ? JSON.parse(subgraph) : null,
+    },
     circulation: circulation.results as AnalyticsData['circulation'],
     chainCirculation: (
       chainCirculation.results as StoredStatus<ChainDay>[]
@@ -101,32 +102,24 @@ const health = async (db: D1Database, now: Date) => {
   const [dates, states] = await db.batch<Record<string, unknown>>([
     db.prepare(`SELECT
       (SELECT MAX(date) FROM circulation_day WHERE chain = 'ethereum') AS ethereum,
-      (SELECT MAX(date) FROM circulation_day WHERE chain = 'base') AS base,
       (SELECT MAX(date) FROM vault_day) AS vault,
       (SELECT MAX(date) FROM claim_day) AS claims,
       (SELECT MAX(date) FROM cloud_daily) AS cloud`),
-    db.prepare("SELECT key, value FROM sync_state WHERE key LIKE 'subgraph:%'"),
+    db.prepare("SELECT value FROM sync_state WHERE key = 'subgraph:ethereum'"),
   ])
   const latest = dates?.results[0] ?? {}
-  const status = new Map(
-    states?.results.map((row) => [row.key, JSON.parse(String(row.value))]),
-  )
+  const state = states?.results[0]?.value
+  const status = typeof state === 'string' ? JSON.parse(state) : null
   const today = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`)
   const fresh = (date: unknown, days: number) =>
     typeof date === 'string' &&
     Number.isFinite(Date.parse(date)) &&
     today - Date.parse(date.slice(0, 10)) >= 0 &&
     today - Date.parse(date.slice(0, 10)) <= days * DAY_MS
-  const reviewed = CHAINS.every(
-    (chain) =>
-      status.get(`subgraph:${chain}`)?.vaultImplementationReviewed === true,
-  )
+  const reviewed = status?.vaultImplementationReviewed === true
   const ok =
-    CHAINS.every(
-      (chain) =>
-        fresh(latest[chain], 2) &&
-        fresh(status.get(`subgraph:${chain}`)?.timestamp, 2),
-    ) &&
+    fresh(latest.ethereum, 2) &&
+    fresh(status?.timestamp, 2) &&
     fresh(latest.vault, 3) &&
     fresh(latest.cloud, 3) &&
     reviewed

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import {finiteNumber, record, utcDate} from '../data'
 import {
-  CHAINS,
   dayQuery,
   ENTITIES,
   graphql,
@@ -41,30 +40,28 @@ export const compare = (
   const expected = record(expectedValue)
   assert.ok(Array.isArray(data.chainCirculation))
   assert.ok(Array.isArray(expected.chainCirculation))
-  for (const chain of CHAINS) {
-    const actualRows = datedRows(
-      data.chainCirculation.filter((row) => record(row).chain === chain),
-    )
-    const expectedRows = datedRows(
-      expected.chainCirculation.filter((row) => record(row).chain === chain),
-    )
-    assert.ok(expectedRows.size > 0, `${chain} subgraph has no daily rows`)
-    assert.equal(actualRows.size, expectedRows.size, `${chain} row count`)
-    for (const date of expectedRows.keys())
-      assert.ok(actualRows.has(date), `${chain} missing ${date}`)
-    const date = [...expectedRows.keys()].sort().at(-1)
-    assert.ok(date)
-    equalTotal(
-      actualRows.get(date)?.circulation,
-      expectedRows.get(date)?.circulation,
-      `${chain} latest circulation`,
-    )
-    assert.equal(
-      record(record(data.subgraphs)[chain]).deployment,
-      record(record(expected.subgraphs)[chain]).deployment,
-      `${chain} deployment`,
-    )
-  }
+  const actualCirculation = datedRows(data.chainCirculation)
+  const expectedCirculation = datedRows(expected.chainCirculation)
+  assert.ok(expectedCirculation.size > 0, 'Ethereum subgraph has no daily rows')
+  assert.equal(
+    actualCirculation.size,
+    expectedCirculation.size,
+    'Ethereum row count',
+  )
+  for (const date of expectedCirculation.keys())
+    assert.ok(actualCirculation.has(date), `Ethereum missing ${date}`)
+  const latest = [...expectedCirculation.keys()].sort().at(-1)
+  assert.ok(latest)
+  equalTotal(
+    actualCirculation.get(latest)?.circulation,
+    expectedCirculation.get(latest)?.circulation,
+    'Ethereum latest circulation',
+  )
+  assert.equal(
+    record(record(data.subgraphs).ethereum).deployment,
+    record(record(expected.subgraphs).ethereum).deployment,
+    'Ethereum deployment',
+  )
   for (const [name, totals] of [
     ['vault', ['totalAssets', 'settlementTotalAssets', 'dailyRewards']],
     [
@@ -126,63 +123,56 @@ export const compare = (
     'Extra Cloud archive dates',
   )
   return [
-    'Subgraphs: row counts, dates, deployments and latest totals match (relative tolerance 1e-9)',
+    'Ethereum subgraph: row counts, dates, deployment and latest totals match (relative tolerance 1e-9)',
     'Cloud: all 663 archive rows match exactly, including captured',
   ]
 }
 
-export const subgraphSnapshot = async (
-  urls: Record<(typeof CHAINS)[number], string>,
-) => {
+export const subgraphSnapshot = async (url: string) => {
+  const meta = await graphql(url, META_QUERY, {})
+  assert.equal(record(meta.latest).chain, 'ethereum', 'Subgraph chain mismatch')
+  const deployment = subgraphMeta(meta)
   const snapshot: {
     chainCirculation: unknown[]
     vault: unknown[]
     claims: unknown[]
-    subgraphs: Record<string, {deployment: string}>
+    subgraphs: {ethereum: {deployment: string}}
   } = {
     chainCirculation: [],
     vault: [],
     claims: [],
-    subgraphs: {},
+    subgraphs: {ethereum: {deployment}},
   }
-  for (const chain of CHAINS) {
-    const url = urls[chain]
-    const meta = await graphql(url, META_QUERY, {})
-    assert.equal(record(meta.latest).chain, chain, 'Subgraph chain mismatch')
-    const deployment = subgraphMeta(meta)
-    snapshot.subgraphs[chain] = {deployment}
-    for (const {entity, spec, table} of ENTITIES) {
-      if (chain === 'base' && table !== 'circulation_day') continue
-      let after = ''
-      while (true) {
-        const data = await graphql(url, dayQuery(entity, spec), {after})
-        assert.equal(
-          subgraphMeta(data),
-          deployment,
-          'Subgraph changed during comparison; retry',
+  for (const {entity, spec, table} of ENTITIES) {
+    let after = ''
+    while (true) {
+      const data = await graphql(url, dayQuery(entity, spec), {after})
+      assert.equal(
+        subgraphMeta(data),
+        deployment,
+        'Subgraph changed during comparison; retry',
+      )
+      const rows = parsePage(data.rows, spec, after)
+      if (table === 'circulation_day')
+        snapshot.chainCirculation.push(
+          ...rows.map((row) => ({...row, chain: 'ethereum'})),
         )
-        const rows = parsePage(data.rows, spec, after)
-        if (table === 'circulation_day')
-          snapshot.chainCirculation.push(
-            ...rows.map((row) => ({...row, chain})),
-          )
-        else if (table === 'vault_day') snapshot.vault.push(...rows)
-        else snapshot.claims.push(...rows)
-        if (rows.length < PAGE_SIZE) break
-        const last = rows.at(-1)
-        assert.ok(last)
-        after = last.date
-      }
+      else if (table === 'vault_day') snapshot.vault.push(...rows)
+      else snapshot.claims.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      const last = rows.at(-1)
+      assert.ok(last)
+      after = last.date
     }
   }
   return snapshot
 }
 
 const main = async () => {
-  const [input, resultsPath, ethereum, base, ...rest] = Bun.argv.slice(2)
-  if (!input || !resultsPath || !ethereum || !base || rest.length)
+  const [input, resultsPath, ethereum, ...rest] = Bun.argv.slice(2)
+  if (!input || !resultsPath || !ethereum || rest.length)
     throw new Error(
-      'Usage: bun scripts/compare.ts <api-data.json|api-data-url> <results.json> <ethereum-subgraph-url> <base-subgraph-url>',
+      'Usage: bun scripts/compare.ts <api-data.json|api-data-url> <results.json> <ethereum-subgraph-url>',
     )
   let data: unknown
   if (/^https?:\/\//.test(input)) {
@@ -193,7 +183,7 @@ const main = async () => {
     if (!response.ok) throw new Error(`Analytics data: HTTP ${response.status}`)
     data = await response.json()
   } else data = JSON.parse(await Bun.file(input).text())
-  const expected = await subgraphSnapshot({ethereum, base})
+  const expected = await subgraphSnapshot(ethereum)
   for (const message of compare(
     data,
     expected,

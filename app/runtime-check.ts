@@ -50,7 +50,6 @@ for (const mode of [
             PHALA_CLOUD_API_KEY: 'test-cloud-key',
             CIRCULATION_API_URL: 'https://circulation.test',
             GOLDSKY_ETHEREUM_URL: 'https://ethereum.test',
-            GOLDSKY_BASE_URL: 'https://base.test',
           },
           outboundService: 'upstream-stubs',
         },
@@ -66,7 +65,6 @@ for (const mode of [
             ],
             DATE: today,
             ETHEREUM: ethereum,
-            BASE: [chainDay(yesterday, 'base'), chainDay(today, 'base')],
             VAULT: [vaultDay(yesterday), vaultDay(today)],
             CLAIM: [claimDay(yesterday), claimDay(today)],
           },
@@ -84,7 +82,7 @@ for (const mode of [
           const failure = (status) => new Response('Upstream failed', {status, headers: {Location: 'https://not-followed.test/'}})
           if (env.MODE === 'redirect') return failure(302)
           if (env.MODE === 'server') return failure(503)
-          if (url.pathname === '/api/all') return Response.json({totalCirculation: '109', ethereum: {timestamp: env.DATE + 'T07:00:00Z'}})
+          if (url.pathname === '/api/all') return Response.json({totalCirculation: '107', ethereum: {timestamp: env.DATE + 'T07:00:00Z'}})
           if (url.pathname === '/api/v1/stats/daily') {
             if (request.headers.get('Authorization') !== 'Bearer test-cloud-key') return failure(401)
             return Response.json({data: env.CLOUD})
@@ -92,10 +90,11 @@ for (const mode of [
           if (url.pathname.endsWith('/market_chart/range')) return Response.json({prices: env.CLOUD.flatMap((row) => [
             [Date.parse(row.date + 'T00:00:00Z'), 1], [Date.parse(row.date + 'T23:00:00Z'), 3],
           ])})
-          const chain = url.hostname === 'ethereum.test' ? 'ethereum' : 'base'
+          if (url.hostname !== 'ethereum.test') return failure(500)
+          const chain = 'ethereum'
           const {query, variables} = JSON.parse(body)
           if (env.MODE === 'graphql-errors') return Response.json({errors: [{message: 'not leaked'}]})
-          const changed = generation > 0 && chain === 'ethereum'
+          const changed = generation > 0
           const _meta = {deployment: chain + (changed ? '-v2' : '-v1'), hasIndexingErrors: env.MODE === 'indexing-errors'}
           if (query.includes('latest(')) return Response.json({data: {_meta, latest: {
             chain, timestamp: String(Date.parse(env.DATE + 'T07:00:00Z') / 1000),
@@ -105,7 +104,7 @@ for (const mode of [
           if (env.MODE === 'page-redirect') return failure(302)
           if (env.MODE === 'page-server') return failure(503)
           if (!query.includes('first: 1000') || !query.includes('orderBy: date') || !query.includes('orderDirection: asc') || !query.includes('date_gt: $after')) return failure(400)
-          let rows = query.includes('chainDays(') ? (chain === 'ethereum' ? env.ETHEREUM : env.BASE)
+          let rows = query.includes('chainDays(') ? env.ETHEREUM
             : query.includes('vaultDays(') ? env.VAULT : env.CLAIM
           rows = rows.filter((row) => row.date > variables.after && (!changed || row.date === env.DATE)).slice(0, 1000).map((row) => ({...row}))
           if (changed) rows = rows.map((row) => ({...row,
@@ -213,8 +212,9 @@ for (const mode of [
     const response = await worker.fetch('https://analytics.test/api/data')
     assert.equal(response.status, 200)
     const data = record(await response.json())
+    assert.deepEqual(Object.keys(record(data.subgraphs)), ['ethereum'])
     assert.ok(Array.isArray(data.chainCirculation))
-    assert.equal(data.chainCirculation.length, mode === 'pagination' ? 1003 : 4)
+    assert.equal(data.chainCirculation.length, mode === 'pagination' ? 1001 : 2)
     assert.ok(Array.isArray(data.vault))
     assert.equal(record(data.vault.at(-1)).totalAssets, 100)
     assert.equal(record(data.vault.at(-1)).settlementTotalAssets, 99)
@@ -284,10 +284,9 @@ for (const mode of [
     assert.deepEqual(data.circulation.at(-1), {
       date: today,
       ethereum: 100,
-      base: 2,
       phala: 3,
       khala: 4,
-      total: 109,
+      total: 107,
     })
     assert.equal((await worker.fetch('https://analytics.test/')).status, 200)
     for (const path of [
@@ -332,14 +331,6 @@ for (const mode of [
         )
         .first<number>('count'),
       1,
-    )
-    assert.equal(
-      await db
-        .prepare(
-          "SELECT COUNT(*) AS count FROM circulation_day WHERE chain = 'base'",
-        )
-        .first<number>('count'),
-      2,
     )
     assert.equal(
       await db

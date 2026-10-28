@@ -146,7 +146,6 @@ test('seed includes only frozen legacy circulation and original Cloud rows', () 
   const row = {
     updated_time: '2025-10-01T00:00:00Z',
     ethereum_circulation: 100,
-    base_circulation: 2,
     phala_circulation: 3,
     khala_circulation: null,
   }
