@@ -91,12 +91,12 @@ Other paths return plain `404 Not Found`.
 Public response headers match the former Vercel production wire headers,
 including its removal of CDN-only directives:
 
-| Data                              | Public Cache-Control                 | Cache API TTL |
-| --------------------------------- | ------------------------------------ | ------------- |
-| Latest                            | `public, max-age=60`                 | 60 seconds    |
-| Snapshot                          | `public, max-age=3600`               | 30 days       |
-| Errors (400/404 date errors, 503) | `no-store`                           | Never stored  |
-| Unknown API paths and preflight   | `public, max-age=0, must-revalidate` | Never stored  |
+| Data                              | Public Cache-Control                 | Cache API TTL | Vercel CDN TTL  |
+| --------------------------------- | ------------------------------------ | ------------- | --------------- |
+| Latest                            | `public, max-age=60`                 | 60 seconds    | 60 seconds      |
+| Snapshot                          | `public, max-age=3600`               | 30 days       | 3600 seconds    |
+| Errors (400/404 date errors, 503) | `no-store`                           | Never stored  | Never stored    |
+| Unknown API paths and preflight   | `public, max-age=0, must-revalidate` | Never stored  | No positive TTL |
 
 The Worker stores computed JSON under fixed keys (`latest`, `snapshot:<date>`)
 using the Cache API, independently of the public response's browser TTL.
@@ -107,17 +107,27 @@ so a new release cannot serve data computed by old code. Cache I/O failures
 fall through to the subgraph; upstream failures are never stored. Upstream
 safety checks run on misses, just as in the former Vercel Runtime Cache.
 
-The old Vercel function used `s-maxage=60, stale-while-revalidate=60` for latest
-and `s-maxage=86400` for snapshots, which Vercel consumed before sending the
-public headers above. The Worker's internal Cache API supplies the shared
-cache instead. Cloudflare's Cache API does not support stale-while-revalidate;
-expired entries are recomputed and no stale fallback is introduced.
+Successful responses also set `Vercel-CDN-Cache-Control: max-age=60` (latest)
+or `max-age=3600` (snapshots). Vercel's external rewrite caches using this
+targeted header, then strips it before sending the public response and keeps
+client `Cache-Control` unchanged. Direct Worker clients see the targeted header.
+Older Vercel projects require rewrite-cache opt-in; see the
+[operations audit](OPERATIONS.md#caching-and-request-cost). The comparison
+script's public-header list is unchanged because Vercel documents this header
+as client-invisible on its responses.
+
+Cloudflare's Cache API does not support stale-while-revalidate; expired
+entries are recomputed and no stale fallback is introduced. Vercel also uses
+only the explicit TTL, without stale-while-revalidate or stale-on-error.
 
 Deploy a new Worker version after moving a subgraph tag so cached historical
 rows from the previous version do not survive the 30-day data TTL. Existing
-browser responses can persist for one hour.
+browser and Vercel responses can each persist for one hour. Independent layer
+TTLs can add; purge Vercel when immediate CDN invalidation is required.
 
-Reference: [Cloudflare Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/).
+References: [Cloudflare Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/),
+[Vercel cache headers](https://vercel.com/docs/caching/cache-control-headers#vercel-cdn-cache-control),
+[Vercel external rewrites](https://vercel.com/docs/routing/rewrites#caching-rewrites-to-external-origins).
 
 ## Configuration and verification
 

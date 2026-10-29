@@ -10,6 +10,7 @@ export const createCached = (
     key: string,
     ttlSeconds: number,
     compute: () => Promise<T>,
+    shouldCache?: (value: T) => boolean,
   ): Promise<T> => {
     // A cancelled originating request can give concurrent waiters an uncached 503.
     const pending = inflight.get(key)
@@ -25,6 +26,7 @@ export const createCached = (
         // A cache outage or malformed entry must not make the API unavailable.
       }
       const value = await compute()
+      if (shouldCache && !shouldCache(value)) return value
       try {
         await cache.put(
           request,

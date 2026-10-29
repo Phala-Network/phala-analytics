@@ -20,9 +20,10 @@ The Ethereum subgraph owns chain-derived state, midnight snapshots, Vault
 accrual and claim events. The circulation API formats its integer wei amounts
 as decimal PHA strings; it does not call RPC or reconstruct historical blocks. The
 `phala-analytics` Cloudflare Worker refreshes a SQLite cache and serves the
-dashboard and JSON APIs. `/api/data` also reads current supply, Vault and
-same-day claim figures from the subgraph on each request, cached for 60 seconds;
-when that read fails it serves the daily rows alone. Archived Phala/Khala circulation stays frozen.
+dashboard and JSON APIs. `/api/data` caches its complete response for 60 seconds,
+including D1 rows and current supply, Vault and same-day claim figures from the
+subgraph. When the live read fails it serves the daily rows alone, also cached
+for 60 seconds. Archived Phala/Khala circulation stays frozen.
 Cloud observations include values that cannot be reconstructed later;
 weekly `cloud_daily` exports to R2 preserve those observations.
 
@@ -63,6 +64,83 @@ Code and component-specific commands:
 | `analytics.phala.network`          | Dashboard and JSON APIs served by the analytics Worker.                                                                                                            |
 | apps claim page                    | `Claimed` (Khala) and `ClaimedAndBridged` (Phala) from `phala-ethereum/prod/gn`; eligibility and transactions use contracts directly.                              |
 | Snapshot space `phala-network.eth` | Separate Phala L2 voting-power API described below.                                                                                                                |
+
+## Caching and request cost
+
+| Route                                       | Cost on a Workers cache miss                                                                                             | Workers cache TTL/layer                | Vercel rewrite CDN TTL | Client Cache-Control                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- | ---------------------- | ------------------------------------------------------- |
+| `/`, `/index.html`                          | Static Assets lookup; no application Worker, D1 or upstream                                                              | Cloudflare-managed Static Assets cache | Not rewritten          | `public, max-age=60`                                    |
+| `/assets/*` (content-hashed JS, CSS, fonts) | Static Assets lookup; no application Worker, D1 or upstream                                                              | Cloudflare-managed Static Assets cache | Not rewritten          | `public, max-age=31536000, immutable`                   |
+| `/favicon.svg`                              | Static Assets lookup; no application Worker, D1 or upstream                                                              | Cloudflare-managed Static Assets cache | Not rewritten          | Default `public, max-age=0, must-revalidate`, with ETag |
+| `/api/data`                                 | One D1 batch of six SQL statements and projection; at most one Goldsky live query if the separate 60 s live entry misses | Complete JSON, 60 s                    | 60 s                   | `public, max-age=60`                                    |
+| `/api/health` (200)                         | One D1 batch of two SQL statements; no upstream                                                                          | Complete healthy JSON, 30 s            | 30 s                   | `no-store`                                              |
+| `/api/circulation`, `/api/all`              | One Goldsky Latest query shared by both routes; no D1                                                                    | Shared latest JSON, 60 s               | 60 s                   | `public, max-age=60`                                    |
+| `/api/snapshot?date=YYYY-MM-DD`             | One Goldsky query (Latest safety + ChainDay); no D1                                                                      | Per-date JSON, 30 days                 | 3600 s                 | `public, max-age=3600`                                  |
+| 400/404 date errors, 503s                   | Invalid dates do no I/O; missing snapshots query Goldsky; failed dashboard requests can query D1/live                    | Never stored                           | Never stored           | `no-store`                                              |
+| Other 404/405s, CORS preflight              | Routing only; no D1/upstream                                                                                             | Never stored                           | No positive TTL        | Existing route-specific headers                         |
+
+Every Cache API hit avoids the listed D1/upstream work. Fixed keys ignore
+irrelevant query parameters; snapshots use the validated date. GET and HEAD
+share entries. Misses coalesce within an isolate, and Worker version IDs
+separate releases. The Cache API is local to a Cloudflare location, can evict
+entries, and does not coordinate simultaneous misses across isolates. Cache
+I/O failure falls through to recomputation. These caches reduce normal load;
+rate limits still need to bound uncached errors and requests for many dates.
+
+| Upstream/storage | Public-request cost                                                                                                        | Existing scheduled/persistence protection                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1               | Six statements per `/api/data` miss; two per `/api/health` miss; zero on hits                                              | Immutable daily rows and sync checkpoints; writes only from hourly refresh/import tooling                                                                                      |
+| Goldsky          | One live query per dashboard live miss, one shared latest query per circulation miss, one query per uncached snapshot date | Hourly refresh queries metadata and pages each of three daily entities at 1000 rows/page, continuing after the stored MAX(date); deployment changes rebuild chain-derived rows |
+| Phala Cloud API  | Zero                                                                                                                       | Hourly refresh fetches only when D1 lacks days through yesterday UTC; each request covers at most 90 days, and committed days are not refetched                                |
+| DefiLlama        | Zero                                                                                                                       | Hourly refresh fetches only Cloud rows with null captured/price values; sequential pages of at most 500 hourly samples; successful values persist in D1                        |
+| R2 backup        | Zero                                                                                                                       | One Cloud-history export on the first successful Sunday UTC refresh, then skipped by its persisted checkpoint                                                                  |
+
+Healthy `/api/health` responses keep client `no-store` while using 30 s internal
+and targeted Vercel caches. A newly unhealthy state can therefore take up to
+30 s to appear directly, or up to 60 s through both cache layers. Once computed,
+503s are never stored and recovery is retried on the next request. Monitor
+`https://analytics.phala.network/api/health` directly. A successful `/api/data`
+daily-only fallback is cached for 60 s. Browser and CDN cache lifetimes can add
+to internal TTLs; no stale-while-revalidate or stale-on-error is enabled.
+
+API success responses use `Vercel-CDN-Cache-Control` with the CDN TTL above;
+Vercel consumes and strips it while forwarding the existing client
+`Cache-Control` unchanged. Direct Worker responses include the targeted header.
+The header is set only after a successful computation, never as a blanket
+route override. External rewrite caching is automatic for Vercel projects
+created on or after April 6, 2026; older projects require dashboard opt-in or
+`x-vercel-enable-rewrite-caching: 1`. Confirm the compatibility project's
+setting before relying on Vercel cache hits. API headers do not change that
+project setting.
+
+After rollout, repeat a successful request through the Vercel hostname and
+check `x-vercel-cache: HIT`, unchanged client `Cache-Control`, and absence of
+`Vercel-CDN-Cache-Control`. Check direct success and 503 headers as well.
+The direct cache namespace changes with each Worker version; Vercel and
+browser snapshot responses can remain for another hour each. Purge Vercel's
+CDN when immediate invalidation is required after a subgraph tag/code change;
+browser caches still expire naturally.
+
+Suggested starting WAF limits (operator-configured, not part of this change):
+300 requests per 60 s per client IP across `/api/*`, with a 60 s block; where
+separate rules are available, 60 requests/minute per IP for `/api/data` and
+`/api/health` and 120/minute for snapshots. Snapshot limits count all dates
+together. At a cold cache, one IP could otherwise create thousands of unique
+historical misses; the snapshot limit allows roughly 120 uncached Goldsky
+requests/minute per IP/rate-limit location. At stable caches, latest
+and dashboard traffic needs roughly one recomputation/minute/key/location,
+and healthy monitoring two/minute/location. These are initial limits, not
+measured capacity; observe legitimate tracker, monitoring and bulk-history
+traffic before tightening. A per-IP rule at Cloudflare can aggregate Vercel
+egress rather than visitors: avoid applying these client thresholds blindly to
+Vercel source IPs, and add a corresponding visitor rule at Vercel or a separately
+sized trusted-proxy policy. Do not trust forwarded-IP headers from arbitrary
+direct clients.
+
+References: [Workers Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/),
+[Static Assets headers](https://developers.cloudflare.com/workers/static-assets/headers/),
+[Vercel cache-control priority/stripping](https://vercel.com/docs/caching/cache-control-headers#vercel-cdn-cache-control),
+and [external rewrite caching](https://vercel.com/docs/routing/rewrites#caching-rewrites-to-external-origins).
 
 ## Goldsky deployments and limits
 
@@ -128,7 +206,7 @@ deleting a version. These limits also apply during rollback.
    cache rows after it changes.
 5. Run a fresh Workers Build to change the circulation Cache API namespace.
    Existing client responses can persist for 60 seconds (latest) or 3600 seconds
-   (snapshots); there is no edge CDN cache.
+   (snapshots); Vercel's separate CDN cache can also persist for an hour.
    Verify plain-number output, `/api/all` totals and sampled daily values
    against `ChainDay`, confirm both JSON endpoints have `base: null`, and
    check the apps claim logs.

@@ -78,6 +78,7 @@ test('the build is self-contained and preview routes assets and the API', async 
     const page = await get('/')
     expect(page.status).toBe(200)
     expect(page.headers.get('content-type')).toContain('text/html')
+    expect(page.headers.get('cache-control')).toBe('public, max-age=60')
     const csp = page.headers.get('content-security-policy') ?? ''
     expect(csp).toContain(
       "script-src 'self' https://static.cloudflareinsights.com/beacon.min.js/;",
@@ -94,6 +95,10 @@ test('the build is self-contained and preview routes assets and the API', async 
     const asset = await get(script ?? '')
     expect(asset.status).toBe(200)
     expect(asset.headers.get('content-type')).toContain('javascript')
+    expect(asset.headers.get('cache-control')).toBe(
+      'public, max-age=31536000, immutable',
+    )
+    expect(asset.headers.get('content-security-policy')).toBe(csp)
     expect((await get('/favicon.svg')).status).toBe(200)
 
     // API paths always reach the Worker: JSON without the page CSP, whatever

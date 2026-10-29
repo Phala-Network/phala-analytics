@@ -67,8 +67,12 @@ that cannot be fully rebuilt from the subgraph or archives.
 ### JSON API
 
 Only GET and HEAD are accepted (405 otherwise); unknown paths return 404.
-`/api/data` uses `Cache-Control: public, max-age=60`; static assets use the
-Workers Static Assets defaults.
+`/api/data` uses `Cache-Control: public, max-age=60`. Its complete successful
+payload (D1 rows, live data and projection) is cached for 60 seconds with the
+version-scoped Workers Cache API. Hits avoid both D1 and live subgraph reads;
+concurrent misses within an isolate share one computation. A successful daily-only
+fallback (`live: null`) is also cached for 60 seconds. Exceptions and 503s are
+never cached.
 `/api/data` returns numeric quantities in **PHA**, not wei, with rows in
 ascending UTC date order:
 
@@ -147,7 +151,33 @@ where stream values are the latest cached dates. It returns 503 if Ethereum's
 daily cache or source timestamp is more than two UTC dates behind,
 Vault/Cloud is more than three dates behind, or a current implementation is
 unreviewed. `claims` is informational and is not freshness-checked. This
-endpoint reports cache freshness, not chain parity.
+endpoint reports cache freshness, not chain parity. Healthy payloads are cached
+internally for 30 seconds; unhealthy payloads and exceptions are never stored.
+Its client `Cache-Control: no-store` remains unchanged. Direct monitoring can
+therefore lag a new failure by up to 30 seconds; the Vercel proxy can add another
+30 seconds. Use the direct Worker endpoint for monitoring.
+
+| Route                                                  | Workers cache                        | Vercel rewrite CDN | Browser Cache-Control                         |
+| ------------------------------------------------------ | ------------------------------------ | ------------------ | --------------------------------------------- |
+| `/`, `/index.html`                                     | Static Assets, managed by Cloudflare | Not rewritten      | `public, max-age=60`                          |
+| `/assets/*` (Vite content hashes)                      | Static Assets, managed by Cloudflare | Not rewritten      | `public, max-age=31536000, immutable`         |
+| `/favicon.svg`                                         | Static Assets, managed by Cloudflare | Not rewritten      | Default: `public, max-age=0, must-revalidate` |
+| `/api/data`                                            | Complete JSON: 60 s; live read: 60 s | 60 s               | `public, max-age=60`                          |
+| `/api/health` (200)                                    | Complete JSON: 30 s                  | 30 s               | `no-store`                                    |
+| `/api/circulation`, `/api/all`                         | Shared latest JSON: 60 s             | 60 s               | `public, max-age=60`                          |
+| `/api/snapshot?date=YYYY-MM-DD`                        | Per-date JSON: 30 days               | 3600 s             | `public, max-age=3600`                        |
+| Errors, unknown routes, unsupported methods, preflight | Not stored                           | No positive TTL    | Existing error/method headers                 |
+
+Successful API responses set `Vercel-CDN-Cache-Control: max-age=<TTL>` so the
+external rewrite can cache them without changing client `Cache-Control`.
+Vercel consumes and strips this targeted header; direct Worker clients can see
+it. Projects created before April 6, 2026 need rewrite-caching opt-in in Vercel.
+Cache API entries are local to each Cloudflare location, may be evicted, and
+are isolated by Worker version. Concurrent isolates and cache outages can
+still repeat work. Independent browser, Cache API and Vercel TTLs can add;
+there is no stale-while-revalidate or stale-on-error policy.
+See the [operations cache audit](../docs/OPERATIONS.md#caching-and-request-cost)
+for upstream costs and rollout verification.
 
 ### Dashboard
 
@@ -180,8 +210,10 @@ Sunset claims are shown as totals. APR is hidden while the latest Vault row is
 unreviewed.
 
 All assets, including the Geist font, are bundled; nothing loads from a CDN.
-`public/_headers` sets the CSP on static assets (Worker responses are
-unaffected). It allows same-origin scripts, styles, fonts and requests plus the
+`public/_headers` sets immutable caching for Vite's hashed `/assets/*` files,
+60-second caching for HTML, and the CSP on static assets (Worker responses are
+unaffected). Other files keep the Workers Static Assets revalidation default.
+The CSP allows same-origin scripts, styles, fonts and requests plus the
 Cloudflare Web Analytics beacon that the zone injects
 (`static.cloudflareinsights.com/beacon.min.js/`; it reports to same-origin
 `/cdn-cgi/rum`), and no inline scripts or styles. The zone's Google tag gateway

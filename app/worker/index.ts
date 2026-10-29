@@ -134,36 +134,34 @@ const health = async (db: D1Database, now: Date) => {
     fresh(latest.vault, 3) &&
     fresh(latest.cloud, 3) &&
     reviewed
-  return Response.json(
-    {
-      ok,
-      generatedAt: now.toISOString(),
-      ...latest,
-      vaultImplementationReviewed: reviewed,
-    },
-    {
-      status: ok ? 200 : 503,
-      headers: {'Cache-Control': 'no-store'},
-    },
-  )
+  return {
+    ok,
+    generatedAt: now.toISOString(),
+    ...latest,
+    vaultImplementationReviewed: reviewed,
+  }
 }
 
 const circulationApis = new WeakMap<
   Env,
   ReturnType<typeof createCirculationApi>
 >()
-const liveCaches = new WeakMap<Env, ReturnType<typeof createCached>>()
+const analyticsCaches = new WeakMap<Env, ReturnType<typeof createCached>>()
+
+const cachedFor = (env: Env) => {
+  let cached = analyticsCaches.get(env)
+  if (!cached) {
+    cached = createCached(caches.default, env.VERSION.id)
+    analyticsCaches.set(env, cached)
+  }
+  return cached
+}
 
 // Live figures share the circulation API's Cache API store and 60-second TTL;
 // failures are not cached and leave the daily rows in place.
 const loadLive = async (env: Env) => {
-  let cached = liveCaches.get(env)
-  if (!cached) {
-    cached = createCached(caches.default, env.VERSION.id)
-    liveCaches.set(env, cached)
-  }
   try {
-    return await cached('live', 60, () => readLive(readConfig(env)))
+    return await cachedFor(env)('live', 60, () => readLive(readConfig(env)))
   } catch (error) {
     console.error(`Live data unavailable - ${describeError(error)}`)
     return null
@@ -198,16 +196,35 @@ export const fetchHandler = async (
     // Static assets (the dashboard) are served before the Worker; other paths are unknown.
     if (path === '/api/data') {
       response = Response.json(
-        await analyticsData(env.DB, new Date(), () => loadLive(env)),
-        {headers: {'Cache-Control': 'public, max-age=60'}},
+        await cachedFor(env)('data', 60, () =>
+          analyticsData(env.DB, new Date(), () => loadLive(env)),
+        ),
+        {
+          headers: {
+            'Cache-Control': 'public, max-age=60',
+            'Vercel-CDN-Cache-Control': 'max-age=60',
+          },
+        },
       )
     } else if (path === '/api/health') {
-      response = await health(env.DB, new Date())
+      const status = await cachedFor(env)(
+        'health',
+        30,
+        () => health(env.DB, new Date()),
+        ({ok}) => ok,
+      )
+      response = Response.json(status, {
+        status: status.ok ? 200 : 503,
+        headers: {
+          'Cache-Control': 'no-store',
+          ...(status.ok ? {'Vercel-CDN-Cache-Control': 'max-age=30'} : {}),
+        },
+      })
     } else {
       response = new Response('Not found', {status: 404})
     }
   } catch (error) {
-    console.error('Analytics request failed', error)
+    console.error(`Analytics request failed - ${describeError(error)}`)
     response = Response.json(
       {error: 'Analytics temporarily unavailable'},
       {

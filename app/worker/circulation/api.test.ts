@@ -191,6 +191,7 @@ describe('recorded production contracts', () => {
     const response = await request(reference.path)
     checkHeaders(response, reference)
     expect(response.headers.get('cache-control')).toBe(latestCacheControl)
+    expect(response.headers.get('vercel-cdn-cache-control')).toBe('max-age=60')
     expect(await response.text()).toBe('858569518.416145188511')
     await request('/api/all?cache-bust=ignored')
     expect(requests).toHaveLength(1)
@@ -201,6 +202,7 @@ describe('recorded production contracts', () => {
     const response = await request('/api/all')
     checkHeaders(response, recorded('/api/all'))
     expect(response.headers.get('cache-control')).toBe(latestCacheControl)
+    expect(response.headers.get('vercel-cdn-cache-control')).toBe('max-age=60')
     const actual = await response.json<Awaited<ReturnType<typeof getAllData>>>()
     const expected = JSON.parse(recorded('/api/all').body)
     expect(actual.sources.ethereum.indexedAt).toBe(actual.ethereum.timestamp)
@@ -227,6 +229,9 @@ describe('recorded production contracts', () => {
       const response = await request(path)
       checkHeaders(response, recorded(path))
       expect(response.headers.get('cache-control')).toBe(snapshotCacheControl)
+      expect(response.headers.get('vercel-cdn-cache-control')).toBe(
+        'max-age=3600',
+      )
       const actual =
         await response.json<Awaited<ReturnType<typeof getSnapshot>>>()
       const expected = JSON.parse(recorded(path).body)
@@ -280,6 +285,7 @@ describe('recorded production contracts', () => {
         expect(response.headers.get('cache-control')).toBe('no-store')
       }
       expect(requests).toHaveLength(0)
+      expect(response.headers.get('vercel-cdn-cache-control')).toBeNull()
     },
   )
 })
@@ -325,6 +331,7 @@ describe('subgraph failures', () => {
         const response = await request(path)
         expect(response.status).toBe(503)
         expect(response.headers.get('cache-control')).toBe('no-store')
+        expect(response.headers.get('vercel-cdn-cache-control')).toBeNull()
         expect(response.headers.get('access-control-allow-origin')).toBe('*')
         expect(response.headers.get('content-type')).toBe(
           recorded(path).contentType,

@@ -8,6 +8,12 @@ Ethereum indexing, the circulating-supply API, and the dashboard at [analytics.p
 
 `circulation-api/vercel.json` is the compatibility proxy configuration for the old `pha-circulation-server.vercel.app` hostname. It contains only external rewrites to the Worker; the Vercel project builds from `circulation-api/`. See [Operations](docs/OPERATIONS.md#circulation-proxy) for verification and rollback.
 
+Successful API responses use version-scoped Workers Cache API entries (60 seconds
+for dashboard/latest, 30 seconds for healthy monitoring, 30 days for historical
+snapshots) and targeted Vercel CDN headers for the compatibility rewrite. Hashed
+dashboard assets are immutable; HTML has a 60-second browser TTL. See the
+[cache and upstream-cost audit](docs/OPERATIONS.md#caching-and-request-cost).
+
 Use Bun **1.4.2** and Node.js **24.x**. Install once at the repository root; dependency versions are pinned and `bun.lock` is shared. Matchstick 0.6.0 requires `libpq5` (installed on Ubuntu 22.04 in CI).
 
 ```bash
