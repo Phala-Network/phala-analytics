@@ -42,8 +42,6 @@ export function ChartCard({
   description,
   rows,
   series,
-  shaded = [],
-  shadedLabel,
   bars,
   table,
   footer,
@@ -54,9 +52,6 @@ export function ChartCard({
   rows: Row[] | undefined
   /** Series with a color are drawn; the others appear in the table only. */
   series: Series[]
-  shaded?: [string, string][]
-  /** Table marker for rows inside `shaded`. */
-  shadedLabel?: string
   /** Draw the first colored series as bars; the tooltip prefixes each row's date. */
   bars?: {periodLabel: string}
   table?: {rows: Row[] | undefined; series: Series[]}
@@ -67,8 +62,6 @@ export function ChartCard({
   )
   const tableRows = table ? table.rows : rows
   const tableSeries = table ? table.series : series
-  const isShaded = (date: string) =>
-    shaded.some(([first, last]) => first <= date && date <= last)
   const skeleton = <Skeleton className="h-[250px] w-full" />
 
   return (
@@ -89,12 +82,7 @@ export function ChartCard({
               periodLabel={bars.periodLabel}
             />
           ) : rows ? (
-            <ChartArea
-              title={title}
-              rows={rows}
-              series={drawn}
-              shaded={shaded}
-            />
+            <ChartArea title={title} rows={rows} series={drawn} />
           ) : (
             skeleton
           )}
@@ -131,11 +119,6 @@ export function ChartCard({
                       <TableRow key={row.date}>
                         <TableCell className="font-medium">
                           {formatDay(row.date)}
-                          {shadedLabel && isShaded(row.date) && (
-                            <span className="text-muted-foreground">
-                              {` (${shadedLabel})`}
-                            </span>
-                          )}
                         </TableCell>
                         {tableSeries.map(({key}) => (
                           <TableCell key={key} className="text-right">

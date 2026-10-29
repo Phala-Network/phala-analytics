@@ -37,8 +37,6 @@ export const formatPercent = (value: number) => percent.format(value)
 /** Milliseconds at 00:00 UTC on a YYYY-MM-DD date. */
 export const dayTime = (date: string) => Date.parse(`${date}T00:00:00Z`)
 export const formatDay = (date: string) => day.format(dayTime(date))
-export const formatDayRange = ([first, last]: readonly [string, string]) =>
-  first === last ? formatDay(first) : `${formatDay(first)} – ${formatDay(last)}`
 /** A recent ISO timestamp as a UTC date and time, e.g. "Oct 28, 2:27 PM UTC". */
 export const formatTimestamp = (iso: string) =>
   `${dateTime.format(Date.parse(iso))} UTC`

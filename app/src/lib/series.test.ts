@@ -3,7 +3,7 @@ import type {AnalyticsData} from '../../worker/data'
 import {vaultDay} from '../../worker/fixtures'
 import {parseDay, VAULT_FIELDS} from '../../worker/subgraph'
 import {DAY_MS} from './format'
-import {backfillRanges, weeklyRewards} from './series'
+import {weeklyRewards} from './series'
 
 const vault = (flowDates: string[], rewards: number[]) =>
   flowDates.map((flowDate, index) => ({
@@ -44,21 +44,5 @@ test('quiet days count as 0 and a week of quiet days stays a 0 bar', () => {
   expect(rows.map(({date, rewards}) => [date, rewards])).toEqual([
     ['2026-10-19', 5],
     ['2026-10-26', 0],
-  ])
-})
-
-test('backfilled Cloud days group into consecutive ranges', () => {
-  const cloud = [
-    ['2026-09-22', false],
-    ['2026-09-23', true],
-    ['2026-09-24', true],
-    ['2026-09-25', false],
-    ['2026-09-26', true],
-    ['2026-09-28', true],
-  ].map(([date, backfilled]) => ({date, backfilled})) as AnalyticsData['cloud']
-  expect(backfillRanges(cloud)).toEqual([
-    ['2026-09-23', '2026-09-24'],
-    ['2026-09-26', '2026-09-26'],
-    ['2026-09-28', '2026-09-28'],
   ])
 })

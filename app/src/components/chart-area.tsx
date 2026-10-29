@@ -1,12 +1,5 @@
 import {useId} from 'react'
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ReferenceArea,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import {Area, AreaChart, CartesianGrid, XAxis, YAxis} from 'recharts'
 import {
   type ChartConfig,
   ChartContainer,
@@ -43,14 +36,11 @@ export default function ChartArea({
   title,
   rows,
   series,
-  shaded = [],
 }: {
   title: string
   rows: Row[]
   /** Drawn series; colors are theme variables such as `var(--chart-1)`. */
   series: (Series & {color: string})[]
-  /** Inclusive [first, last] UTC days to shade. */
-  shaded?: [string, string][]
 }) {
   const id = useId().replaceAll(':', '')
   const chartConfig = Object.fromEntries(
@@ -105,15 +95,6 @@ export default function ChartArea({
           ))}
         </defs>
         <CartesianGrid vertical={false} />
-        {shaded.map(([x1, x2]) => (
-          <ReferenceArea
-            key={x1}
-            x1={x1}
-            x2={x2}
-            fill="var(--muted-foreground)"
-            fillOpacity={0.15}
-          />
-        ))}
         <XAxis
           dataKey="date"
           tickLine={false}
