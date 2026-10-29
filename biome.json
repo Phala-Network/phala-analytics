@@ -18,6 +18,11 @@
   "formatter": {
     "indentStyle": "space"
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "json": {
     "parser": {
       "allowTrailingCommas": true,
@@ -39,6 +44,12 @@
           "quoteStyle": "single",
           "semicolons": "asNeeded"
         }
+      }
+    },
+    {
+      "includes": ["app/src/components/ui/**"],
+      "linter": {
+        "enabled": false
       }
     },
     {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {Buffer} from 'node:buffer'
-import {record, shiftDate} from '../data'
+import {record, shiftDate} from '../worker/data'
 
 const HEADERS = [
   'content-type',

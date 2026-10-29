@@ -173,9 +173,9 @@ fail this strict comparison; inspect the changed fields and rerun, rather
 than widening the tolerance.
 
 Tests reuse the earlier production fixtures in
-`app/circulation/fixtures/production.json` (recorded before the approved
+`app/worker/circulation/fixtures/production.json` (recorded before the approved
 Ethereum-only formula change) and current production wire fixtures in
-`app/circulation/fixtures/worker-production.json`. They cover exact snapshot
+`app/worker/circulation/fixtures/worker-production.json`. They cover exact snapshot
 bytes, number formatting, errors and recovery, CORS, cache expiry and release
 isolation; the workerd regression test also protects the dashboard routes.
 

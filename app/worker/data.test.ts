@@ -1,4 +1,5 @@
 import {expect, test} from 'bun:test'
+import {seedQueries} from '../scripts/seed'
 import {
   captured,
   cloudSource,
@@ -11,7 +12,6 @@ import {
   utcDate,
 } from './data'
 import {chainDay, claimDay, dailyCloud, vaultDay} from './fixtures'
-import {seedQueries} from './scripts/seed'
 import {
   CHAIN_FIELDS,
   CLAIM_FIELDS,

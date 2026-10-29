@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
-import {CIRCULATION_SERIES_START, finiteNumber, record, utcDate} from '../data'
+import {
+  CIRCULATION_SERIES_START,
+  finiteNumber,
+  record,
+  utcDate,
+} from '../worker/data'
 import {
   dayQuery,
   ENTITIES,
@@ -8,7 +13,7 @@ import {
   PAGE_SIZE,
   parsePage,
   subgraphMeta,
-} from '../subgraph'
+} from '../worker/subgraph'
 import {exportRows} from './seed'
 
 const datedRows = (value: unknown) => {

@@ -397,15 +397,8 @@ for (const mode of [
       khala: 4,
       total: 107,
     })
-    assert.equal((await worker.fetch('https://analytics.test/')).status, 200)
-    for (const path of [
-      '/',
-      '/api/data',
-      '/api/health',
-      '/app.js',
-      '/app.css',
-      '/favicon.svg',
-    ]) {
+    // Static assets are served before the Worker; see assets.test.ts.
+    for (const path of ['/api/data', '/api/health']) {
       const head = await worker.fetch(`https://analytics.test${path}`, {
         method: 'HEAD',
       })

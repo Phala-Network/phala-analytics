@@ -1,6 +1,6 @@
 import {mkdir, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
-import {cloudRow, nullableNumber, record, utcDate} from '../data'
+import {cloudRow, nullableNumber, record, utcDate} from '../worker/data'
 
 export interface BatchQuery {
   sql: string

@@ -5,7 +5,6 @@ import {
   DAY_MS,
   realtimeRow,
 } from './data'
-import {ASSETS, UPLOT_SCRIPT, UPLOT_STYLE} from './page'
 import type {ChainDay, VaultDay} from './subgraph'
 import {sync} from './sync'
 
@@ -94,27 +93,6 @@ export const analyticsData = async (
   }
 }
 
-// Cloudflare Web Analytics (automatic setup) injects a versioned beacon at
-// beacon.min.js/<version>; the trailing slash matches that path prefix. Beacons
-// post to this origin's /cdn-cgi/rum, which connect-src 'self' covers.
-const WEB_ANALYTICS_SCRIPT =
-  'https://static.cloudflareinsights.com/beacon.min.js/'
-
-const PAGE_HEADERS = {
-  'Content-Security-Policy': [
-    "default-src 'none'",
-    `script-src 'self' ${UPLOT_SCRIPT} ${WEB_ANALYTICS_SCRIPT}`,
-    `style-src 'self' ${UPLOT_STYLE}`,
-    "connect-src 'self'",
-    "img-src 'self'",
-    "base-uri 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'none'",
-  ].join('; '),
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-}
-
 const health = async (db: D1Database, now: Date) => {
   const [dates, states] = await db.batch<Record<string, unknown>>([
     db.prepare(`SELECT
@@ -184,16 +162,8 @@ export const fetchHandler = async (
     })
   let response: Response
   try {
-    const asset = ASSETS[path]
-    if (asset) {
-      response = new Response(asset.body, {
-        headers: {
-          ...PAGE_HEADERS,
-          'Content-Type': asset.type,
-          'Cache-Control': 'public, max-age=300',
-        },
-      })
-    } else if (path === '/api/data') {
+    // Static assets (the dashboard) are served before the Worker; other paths are unknown.
+    if (path === '/api/data') {
       response = Response.json(await analyticsData(env.DB, new Date()), {
         headers: {'Cache-Control': 'public, max-age=300'},
       })
