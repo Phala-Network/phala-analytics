@@ -217,7 +217,7 @@ branch deletion. Preview builds are disabled.
 Builds runs from `/app`: build `bun install --frozen-lockfile`, then deploy
 `bunx cf deploy --provision=false`. Its watch paths are `app/*`, `package.json`,
 `bun.lock` and `biome.json`; build variables are `SKIP_DEPENDENCY_INSTALL=1`,
-`CLOUDFLARE_ACCOUNT_ID` for the production account and `CF_SEND_TELEMETRY=0`.
+`CLOUDFLARE_ACCOUNT_ID` for the production account and `CF_SEND_TELEMETRY=false`.
 The deploy command builds Vite and uploads the Worker and static assets.
 The `analytics.phala.network` Custom Domain is declared in `cloudflare.config.ts`;
 the zone must not have a conflicting DNS record for that hostname.

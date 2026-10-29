@@ -144,15 +144,15 @@ checks, so only CI-passed merges reach the production build.
 
 Worker **phala-analytics** has these Builds settings:
 
-| Setting           | Value                                                                                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------ |
-| Production branch | `main`                                                                                                 |
-| Root directory    | `/app`                                                                                                 |
-| Build command     | `bun install --frozen-lockfile`                                                                        |
-| Deploy command    | `bunx cf deploy --provision=false`                                                                     |
-| Watch paths       | `app/*`, `package.json`, `bun.lock`, `biome.json`                                                      |
-| Build environment | `SKIP_DEPENDENCY_INSTALL=1`, `CLOUDFLARE_ACCOUNT_ID` for the production account, `CF_SEND_TELEMETRY=0` |
-| Preview builds    | Disabled                                                                                               |
+| Setting           | Value                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| Production branch | `main`                                                                                                     |
+| Root directory    | `/app`                                                                                                     |
+| Build command     | `bun install --frozen-lockfile`                                                                            |
+| Deploy command    | `bunx cf deploy --provision=false`                                                                         |
+| Watch paths       | `app/*`, `package.json`, `bun.lock`, `biome.json`                                                          |
+| Build environment | `SKIP_DEPENDENCY_INSTALL=1`, `CLOUDFLARE_ACCOUNT_ID` for the production account, `CF_SEND_TELEMETRY=false` |
+| Preview builds    | Disabled                                                                                                   |
 
 `cf deploy` builds the Vite dashboard and Worker together. D1, R2, cron and
 `analytics.phala.network` remain declared in `app/cloudflare.config.ts`;
