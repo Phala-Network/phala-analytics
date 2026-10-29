@@ -12,6 +12,7 @@ Phala Cloud daily stats ──────────────────�
 DefiLlama PHA price ───────────────────────────────────────────────────────────────┘
 
 pha-circulation-server.vercel.app/api/* ──> Vercel external rewrite ──> Worker /api/*
+khala-circulation-api.phala-dev.workers.dev/* ──> service binding ──> Worker /api/circulation
 apps claim page ──> phala-ethereum/prod (Khala and Phala claim logs)
 ```
 
@@ -55,6 +56,7 @@ Code and component-specific commands:
 | Consumer                           | Contract                                                                                                                                                           |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | External supply trackers           | `https://pha-circulation-server.vercel.app/api/circulation`, a plain decimal with no newline or JSON wrapper. Individual tracker identities are not recorded.      |
+| Legacy Khala supply trackers       | `https://khala-circulation-api.phala-dev.workers.dev/` → service binding GET `/api/circulation`, preserving upstream status, body and cache policy.                |
 | Analytics current circulation      | `/api/all`; the Phala/Khala objects are zero.                                                                                                                      |
 | Daily API consumers                | `/api/snapshot?date=YYYY-MM-DD`; values at exactly 00:00 UTC, last-observed block metadata.                                                                        |
 | `phala-analytics` Worker           | Direct `ChainDay`, `VaultDay`, `ClaimDay` reads, plus `Latest` and `ChainState` for live figures; Phala Cloud daily stats and DefiLlama price (CoinGecko-sourced). |

@@ -17,6 +17,7 @@ jobs:
     outputs:
       subgraph: ${{ steps.filter.outputs.subgraph }}
       app: ${{ steps.filter.outputs.app }}
+      khala-circulation-api: ${{ steps.filter.outputs.khala-circulation-api }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -32,6 +33,13 @@ jobs:
               - &ci '.github/workflows/ci.yml'
             app:
               - 'app/**'
+              - *shared
+              - *lock
+              - *biome
+              - *ignore
+              - *ci
+            khala-circulation-api:
+              - 'legacy/khala-circulation-api/**'
               - *shared
               - *lock
               - *biome
@@ -71,6 +79,22 @@ jobs:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run verify:app
+
+  khala-circulation-api:
+    needs: changes
+    if: needs.changes.outputs.khala-circulation-api == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: legacy/khala-circulation-api/package.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run verify:khala-circulation-api
 
   check:
     runs-on: ubuntu-latest
