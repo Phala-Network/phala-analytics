@@ -148,7 +148,7 @@ and parity, then move `prod`. Changing a consumer flag does not validate accrual
 
 ## Development
 
-Use Bun **1.4.2** and Node.js **20.18.1+**. Dependencies are exact pins in the
+Use Bun **1.4.2** and Node.js **24.x**. Dependencies are exact pins in the
 text `bun.lock`.
 
 ```bash
@@ -179,8 +179,8 @@ services; check remaining credits in the dashboard. Scale's free allowance is
 **deployed subgraphs at three**, including paused versions. Check deployment
 slots before an upgrade and storage after sync. Pausing does not free a slot.
 
-1. Set `SUBGRAPH_VERSION` to the new version, then build and deploy it alongside
-   the current version, leaving `prod` unchanged:
+1. From `subgraph/`, set `SUBGRAPH_VERSION` to the new version, then build and
+   deploy it alongside the current version, leaving `prod` unchanged:
 
    ```bash
    bun install --frozen-lockfile

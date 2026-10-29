@@ -165,8 +165,8 @@ local commands, pass `--local --persist-to <directory>`; omitting `--local`
 targets the real database. The existing database and the R2 bucket must be
 present before deployment with `--provision=false`.
 
-Load `PHALA_CLOUD_API_KEY` from the secret store. The circulation API URL and
-public Goldsky `/prod/gn` URL are text bindings. Normal local development
+Load `PHALA_CLOUD_API_KEY` from the secret store. The public Goldsky `/prod/gn`
+URL is a text binding. Normal local development
 uses isolated D1 and R2; `cf dev --mode manual` uses remote D1 and can write live
 data through the scheduled endpoint.
 
@@ -188,3 +188,17 @@ the intended Cloudflare account/profile. The `analytics.phala.network` Worker
 Custom Domain is declared in `cloudflare.config.ts`; the zone must not have a
 conflicting DNS record for that hostname. Verify cron runs, fresh health and
 browser rendering after deployment.
+
+### Circulation API
+
+The same Worker serves `/api/circulation`, `/api/all`, and `/api/snapshot` from
+`circulation/`, using the existing `GOLDSKY_ETHEREUM_URL` binding. The hourly
+realtime refresh calls the same circulation reader directly. D1-backed dashboard
+routes keep their existing response contracts. There is no HTTP call through the
+legacy Vercel hostname. `VERSION` is a Worker version-metadata binding used to
+isolate circulation Cache API entries across releases.
+
+See [the API contract](../docs/CIRCULATION_API.md) for exact serialization,
+CORS, errors, caching, fixtures and the 30-date comparison command. See
+[Operations](../docs/OPERATIONS.md#circulation-api-cutover) for the staged
+Worker deployment and Vercel compatibility-proxy cutover.

@@ -32,7 +32,7 @@
   },
   "overrides": [
     {
-      "includes": ["circulation-api/**", "app/**"],
+      "includes": ["app/**"],
       "javascript": {
         "formatter": {
           "bracketSpacing": false,

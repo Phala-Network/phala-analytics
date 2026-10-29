@@ -5,15 +5,13 @@
   "packageManager": "bun@1.4.2",
   "workspaces": [
     "subgraph",
-    "circulation-api",
     "app"
   ],
   "scripts": {
     "check": "biome ci .",
     "verify:subgraph": "bun run --cwd subgraph codegen && bun run --cwd subgraph build && bun run --cwd subgraph test && bun run --cwd subgraph test:verify && bun run --cwd subgraph typecheck && bun run --cwd subgraph check",
-    "verify:circulation-api": "bun run --cwd circulation-api typecheck && bun run --cwd circulation-api test && bun run --cwd circulation-api check",
     "verify:app": "bun run --cwd app typecheck && bun run --cwd app check && bun run --cwd app test && bun run --cwd app build",
-    "verify": "bun run verify:subgraph && bun run verify:circulation-api && bun run verify:app && bun run check"
+    "verify": "bun run verify:subgraph && bun run verify:app && bun run check"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3"

@@ -1,3 +1,5 @@
+import {getAllData} from './circulation/circulation'
+import {readConfig} from './circulation/config'
 import {
   captured,
   cloudSource,
@@ -110,14 +112,13 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
   }
 
   await attempt('realtime', async () => {
-    const response = await checkedFetch(
-      new URL('/api/all', env.CIRCULATION_API_URL).toString(),
-      'Circulation realtime',
+    const data = await getAllData(readConfig(env), (url, init) =>
+      checkedFetch(url, 'Circulation realtime', init, 8000),
     )
     await stateStatement(
       db,
       'realtime',
-      JSON.stringify(realtimeRow(await json(response))),
+      JSON.stringify(realtimeRow(data)),
       now,
     ).run()
   })

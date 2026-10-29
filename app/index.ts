@@ -1,3 +1,4 @@
+import {createCirculationApi} from './circulation'
 import {
   type AnalyticsData,
   CIRCULATION_SERIES_START,
@@ -153,16 +154,34 @@ const health = async (db: D1Database, now: Date) => {
   )
 }
 
+const circulationApis = new WeakMap<
+  Env,
+  ReturnType<typeof createCirculationApi>
+>()
+
 export const fetchHandler = async (
   request: Request,
   env: Env,
 ): Promise<Response> => {
+  const path = new URL(request.url).pathname
+  // The dashboard endpoints keep their existing method and error handling.
+  if (
+    (path === '/api' || path.startsWith('/api/')) &&
+    path !== '/api/data' &&
+    path !== '/api/health'
+  ) {
+    let api = circulationApis.get(env)
+    if (!api) {
+      api = createCirculationApi(caches.default, env.VERSION.id)
+      circulationApis.set(env, api)
+    }
+    return api.fetch(request, env)
+  }
   if (request.method !== 'GET' && request.method !== 'HEAD')
     return new Response('Method not allowed', {
       status: 405,
       headers: {Allow: 'GET, HEAD'},
     })
-  const path = new URL(request.url).pathname
   let response: Response
   try {
     const asset = ASSETS[path]

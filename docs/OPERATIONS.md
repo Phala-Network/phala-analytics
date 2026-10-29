@@ -3,17 +3,14 @@
 ## Data flow
 
 ```text
-Ethereum ──> Goldsky phala-ethereum/prod ──> this API (Vercel)
-                                               ├─> /api/circulation ─> supply trackers
-                                               ├─> /api/all ─> current analytics
-                                               └─> /api/snapshot ─> daily API consumers
+Ethereum ──> Goldsky phala-ethereum/prod ──> phala-analytics Worker
+                                                ├─> /api/circulation (supply trackers)
+                                                ├─> /api/all, /api/snapshot
+                                                └─> ChainDay / VaultDay / ClaimDay ──┐
+Phala Cloud daily stats ───────────────────────────────────────────────────────────┼─> D1 cache ─> dashboard
+DefiLlama PHA price ───────────────────────────────────────────────────────────────┘
 
-Goldsky ChainDay / VaultDay / ClaimDay ──┐
-Phala Cloud daily stats ────────────────┼─> phala-analytics Worker
-DefiLlama PHA price ───────────────────┘        │ SQLite cache
-                                              v
-                                     analytics.phala.network
-
+pha-circulation-server.vercel.app/api/* ──> Vercel external rewrite ──> Worker /api/*
 apps claim page ──> phala-ethereum/prod (Khala and Phala claim logs)
 ```
 
@@ -36,9 +33,10 @@ retain `base: null`; `/api/all` retains `sources.base: null`. There is no
 separate bridged-chain indexer or API request. Verify the subgraph uses this
 formula before deploying the API.
 
-The circulation API runs on Node.js 24.x, pinned by `engines.node` in
-`circulation-api/package.json`. Vercel uses that pin; CI reads the same value before running
-the Bun toolchain.
+The circulation API and dashboard run in one Cloudflare Worker. Node.js 24.x
+is used only for local tooling and CI, with each package declaring its own
+version. The Vercel project becomes a configuration-only compatibility proxy
+after the staged cutover below.
 
 Code and component-specific commands:
 
@@ -46,7 +44,7 @@ Code and component-specific commands:
   manifests, mappings, ABI review, builds, deploy commands and parity verifier.
 - [Analytics Worker](../app/README.md):
   refresh, cache schema, archive seeding, exports, deployment and secrets.
-- [Circulation API contract](../circulation-api/README.md): endpoint shapes, date convention,
+- [Circulation API contract](CIRCULATION_API.md): endpoint shapes, date convention,
   cache headers and environment variables.
 
 ## Consumers
@@ -102,8 +100,8 @@ deleting a version. These limits also apply during rollback.
 4. Move `phala-ethereum/prod` to the verified version. Both the API and apps
    use tag URLs; the Worker tracks `_meta.deployment` and reloads chain-derived
    cache rows after it changes.
-5. Promote a fresh circulation API deployment to change its runtime cache
-   namespace. Existing daily CDN responses can take up to one day to expire.
+5. Deploy a fresh Worker version to change the circulation Cache API namespace.
+   Existing daily CDN responses can take up to one day to expire.
    Verify plain-number output, `/api/all` totals and sampled daily values
    against `ChainDay`, confirm both JSON endpoints have `base: null`, and
    check the apps claim logs.
@@ -111,8 +109,57 @@ deleting a version. These limits also apply during rollback.
    deployed versions at or below three.
 
 Before deleting the old version, rollback can move `prod` back and promote a
-fresh API deployment. After deletion, recovery requires redeploying and
+fresh Worker version. After deletion, recovery requires redeploying and
 resyncing that version; deleting an indexer is not an instant rollback.
+
+### Circulation API cutover
+
+1. Merge the circulation port and deploy the Worker from `app/` with
+   `cf deploy --provision=false`. D1/R2, cron and the dashboard domain stay in
+   the same Worker. The public `GOLDSKY_ETHEREUM_URL` and new `VERSION` binding
+   are declared in its config. Do not switch the Vercel deployment yet.
+2. From `app/`, compare the original function with the canonical Worker:
+
+   ```bash
+   bun scripts/compare-circulation.ts \
+     https://pha-circulation-server.vercel.app https://analytics.phala.network
+   ```
+
+   Require zero failures; retain the JSON report. Verify `/`, `/api/data` and
+   `/api/health` on the Worker as well. The comparator includes all API routes,
+   30 snapshot dates, invalid dates, unknown routes, HEAD/POST and preflight.
+3. Switch the existing Vercel project to this repository with Root Directory
+   `circulation-api`, Framework Preset **Other**, and empty build/install/output
+   overrides. This directory contains only `vercel.json`; no function, package
+   manifest or Node runtime is needed. For a controlled CLI cutover, deploy
+   that directory to the existing project rather than reconnecting Git early.
+   Keep its previous production deployment ID/URL for rollback.
+4. Compare `https://analytics.phala.network` against
+   `https://pha-circulation-server.vercel.app` with the same script. Require
+   zero failures, including 400/404 bodies, CORS/preflight and cache headers.
+   This final check is necessary because local Worker tests do not execute
+   Vercel's external proxy. Confirm tracker clients still receive a plain
+   decimal with no trailing newline.
+
+The sole rewrite is `/api/:path*` →
+`https://analytics.phala.network/api/:path*`. Vercel's wildcard also matches
+`/api`, and it forwards query strings without changing the browser URL. The
+proxy returns upstream status/body and headers; Vercel adds its own platform
+headers and can consume CDN-specific cache directives. See
+[Vercel external rewrites](https://vercel.com/docs/rewrites#external-rewrites).
+New projects (created on or after April 6, 2026) honor upstream cache headers by
+default; older projects need the dashboard's external-rewrite caching setting
+or the `x-vercel-enable-rewrite-caching` opt-in to cache external rewrites.
+Keep the configuration minimal; the Worker's Cache API bounds upstream reads
+regardless of Vercel proxy caching. `no-store` errors must never be cached.
+
+Vercel protection, redirects or platform behavior can affect external rewrites.
+Only the post-switch comparison verifies actual status/header forwarding for
+this project. Before the switch, the original Vercel function is the independent
+reference; afterward, comparing both hostnames verifies proxy fidelity. Roll
+back by promoting the saved Vercel deployment first, then restore the previous
+Worker version if needed. The old function remains available in that Vercel
+deployment and in Git history; it need not remain in the active source tree.
 
 ### API returns 503
 
@@ -120,11 +167,11 @@ Read the configured Ethereum subgraph's `Latest` and `_meta` directly. Confirm
 the URL uses the expected `prod` tag, indexing is error-free, the latest
 timestamp is within 15 minutes, and `vaultImplementationReviewed` is true. A current
 indexing failure or unreviewed implementation also blocks uncached daily
-reads. Check Vercel logs for the error class and the subgraph for details.
+reads. Check Worker logs for the error class and the subgraph for details.
 
 Repair indexing or review the new implementation before moving a tag. The API
 does not use RPC or stale fallback data. Invalid or unavailable dates return
-400/404 and are not cached. Promote a previous API deployment only after
+400/404 and are not cached. Deploy a previous Worker version only after
 checking that its upstream services still exist; versions dependent on
 retired squids, RPC or deleted subgraphs cannot restore service.
 
@@ -161,5 +208,5 @@ analytics data source; the old Grafana service is retired.
 
 All `subsquid.phala.network` squids, including circulation, Sygma, computation,
 spore-vault and phat-contract, are retired. The Cloudflare Worker
-[`subsquid-retired`](https://github.com/Phala-Network/scripts-toolbox/tree/main/workers/subsquid-retired)
+`subsquid-retired` (maintained in the private scripts-toolbox repository)
 returns `410 Gone`; restoring an old consumer does not restore these services.

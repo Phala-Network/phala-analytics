@@ -23,5 +23,8 @@
     "viem": "2.56.8",
     "assemblyscript": "0.19.23"
   },
-  "packageManager": "bun@1.4.2"
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "node": "24.x"
+  }
 }

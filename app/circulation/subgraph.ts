@@ -94,7 +94,16 @@ const parseState = (value: unknown, indexedBlock: bigint): ChainState => {
 
 // One query to Ethereum. Daily reads also check current indexer freshness
 // and implementation safety, without Graph time-travel queries or RPC calls.
-export const readSubgraph = async (config: Config, date?: string) => {
+export type GraphRequest = (
+  url: string,
+  init?: RequestInit,
+) => Promise<Response>
+
+export const readSubgraph = async (
+  config: Config,
+  date?: string,
+  request: GraphRequest = fetch,
+) => {
   const query = date
     ? `query Snapshot($date: ID!) {
         latest(id: "current") { chain timestamp vaultImplementationReviewed }
@@ -107,7 +116,7 @@ export const readSubgraph = async (config: Config, date?: string) => {
       }`
   let body: unknown
   try {
-    const response = await fetch(config.ethereumUrl, {
+    const response = await request(config.ethereumUrl, {
       method: 'POST',
       headers: {'content-type': 'application/json'},
       body: JSON.stringify({query, variables: date ? {date} : undefined}),

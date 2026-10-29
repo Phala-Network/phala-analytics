@@ -1,6 +1,11 @@
 import {formatAmount, formatTotalCirculation} from './calc.js'
 import type {Config} from './config.js'
-import {type ChainState, readSubgraph, SubgraphError} from './subgraph.js'
+import {
+  type ChainState,
+  type GraphRequest,
+  readSubgraph,
+  SubgraphError,
+} from './subgraph.js'
 
 // Block timestamps in the legacy squid format: whole seconds written with
 // microsecond precision.
@@ -32,8 +37,8 @@ const zeroSubstrateChain = () => ({
 })
 
 // Portal escrow stays in Ethereum circulation; Base has no separate state.
-export const getAllData = async (config: Config) => {
-  const ethSource = await readSubgraph(config)
+export const getAllData = async (config: Config, request?: GraphRequest) => {
+  const ethSource = await readSubgraph(config, undefined, request)
   const ethereum = ethSource.state
   if (!ethereum) throw new SubgraphError('Missing Latest state')
   const ethereumAmounts = formatEthereum(ethereum)
