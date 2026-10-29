@@ -69,11 +69,16 @@ export function ChartCard({
   )
   const tableRows = table ? table.rows : rows
   const tableSeries = table ? table.series : series
+  // A legend (pt-3 and one text-xs line) takes 28px from the chart, so
+  // charts with one are taller and every plot is 250px.
+  const height = !bars && drawn.length > 1 ? 'h-[278px]' : 'h-[250px]'
   const isShaded = (date: string) =>
     shaded.some(([first, last]) => first <= date && date <= last)
 
   return (
-    <Card className="@container/card">
+    // Subgrid rows line up the header, chart and footer of cards in a row; a
+    // container query on the card would disable the subgrid.
+    <Card className="row-span-3 grid grid-rows-subgrid">
       <CardHeader>
         <CardTitle>
           <h3>{title}</h3>
@@ -83,7 +88,7 @@ export function ChartCard({
         {headline}
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        <Suspense fallback={<Skeleton className="h-[250px] w-full" />}>
+        <Suspense fallback={<Skeleton className={`${height} w-full`} />}>
           {rows && bars && drawn[0] ? (
             <ChartBar
               title={title}
@@ -97,16 +102,15 @@ export function ChartCard({
               rows={rows}
               series={drawn}
               shaded={shaded}
+              className={height}
             />
           ) : (
-            <Skeleton className="h-[250px] w-full" />
+            <Skeleton className={`${height} w-full`} />
           )}
         </Suspense>
       </CardContent>
-      {/* The footer fills cards stretched by their row, and its first line is
-      the table trigger, so triggers line up across a row. The ghost trigger's
-      icon lines up with the card text. */}
-      <CardFooter className="flex-1 flex-col items-start gap-2 text-sm">
+      {/* The table trigger leads the footer, so triggers line up across a row. */}
+      <CardFooter className="flex-col items-start gap-2 text-sm">
         <Collapsible className="w-full">
           <CollapsibleTrigger asChild disabled={!tableRows}>
             <Button variant="ghost" size="sm" className="group -ml-1.5">

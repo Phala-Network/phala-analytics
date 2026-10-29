@@ -268,7 +268,7 @@ export function App() {
               series={CIRCULATION}
               headline={
                 <div className="flex flex-col gap-1 pt-2">
-                  <div className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                  <div className="text-2xl font-semibold tabular-nums @[250px]/card-header:text-3xl">
                     {view ? (
                       `${view.circulation} PHA`
                     ) : (
