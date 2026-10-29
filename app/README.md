@@ -88,7 +88,7 @@ ascending UTC date order:
   vault: [{ date, flowDate, ...vaultMetrics, ...implementationStatus }],
   claims: [{ date, flowDate, khalaClaimCount, khalaFree, khalaStaked, phalaClaimCount, phalaFree, phalaStaked }],
   cloud: [{ date, totalUsers, totalVms, runningVms, totalVcpu, runningVcpu, activeUsers, captured, backfilled }],
-  projection: { method: "trend", generatedAt, points: [{ date, total }] }
+  projection: { method: "trend" | "trend-claims-only", generatedAt, points: [{ date, total }] }
 }
 ```
 
@@ -120,7 +120,7 @@ or null without a settlement.
 PHA amounts are daily flows, not cumulative totals.
 
 `live` is read from the subgraph's `Latest` and `ChainState` entities in one
-query on each request, alongside the D1 reads, and cached with the circulation
+query on each request, alongside the D1 reads, with a 2-second timeout, and cached with the circulation
 API's Cache API helper for 60 seconds under the Worker version. It uses the
 circulation API's checks: no indexing errors, a reviewed Vault implementation
 and `Latest` at most 15 minutes old. Any failure is logged without upstream
@@ -135,7 +135,9 @@ per day starting with that row's `total`. Sunset claims continue at the average
 daily amount over the trailing 90 claim flow days, capped at the latest
 `sunsetReward` (the unclaimed pool), and the Vault reward reserve
 (`vaultReward`, floored at 0) is paid out at the latest `rewardRate` until
-exhausted; no top-ups are assumed. It is never mixed into `circulation`.
+exhausted; no top-ups are assumed. While the latest Vault row is unreviewed,
+the Vault component is omitted and `method` is `trend-claims-only`. It is never
+mixed into `circulation`.
 
 Cloud's `runningVcpu`, `activeUsers`, and unpriced `captured` can be null.
 A D1 error, or no served Ethereum daily row, returns a generic 503.

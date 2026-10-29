@@ -301,7 +301,10 @@ for (const mode of [
     assert.equal(response.headers.get('cache-control'), 'public, max-age=60')
     const data = record(await response.json())
     const projection = record(data.projection)
-    assert.equal(projection.method, 'trend')
+    assert.equal(
+      projection.method,
+      mode === 'unreviewed' ? 'trend-claims-only' : 'trend',
+    )
     assert.ok(Array.isArray(projection.points))
     assert.deepEqual(projection.points[0], {date: today, total: 107})
     assert.ok(projection.points.length >= 366)

@@ -10,6 +10,9 @@ import {
 import {finiteNumber} from './data'
 import {CLAIM_FIELDS, type ClaimDay, count, wei} from './subgraph'
 
+// The dashboard falls back to daily rows rather than wait for a slow subgraph.
+export const LIVE_TIMEOUT_MS = 2000
+
 // Latest and the ChainState claim counters come from the same indexed block.
 // The counters hold the current UTC day's claims and reset at each midnight.
 const LIVE_QUERY = `{
@@ -35,11 +38,11 @@ export interface LiveData {
  * reviewed Vault implementation and Latest at most 15 minutes old.
  */
 export const readLive = async (
-  config: Config,
+  {ethereumUrl}: Pick<Config, 'ethereumUrl'>,
   request?: GraphRequest,
 ): Promise<LiveData> => {
   const {data, latest, indexedBlock} = await queryLatest(
-    config,
+    {ethereumUrl, timeoutMs: LIVE_TIMEOUT_MS},
     LIVE_QUERY,
     undefined,
     request,

@@ -4,7 +4,8 @@ import {shiftDate} from './data'
 const CLAIM_WINDOW_DAYS = 90
 
 export interface Projection {
-  method: 'trend'
+  /** `trend-claims-only` omits Vault rewards while the latest Vault row is unreviewed. */
+  method: 'trend' | 'trend-claims-only'
   generatedAt: string
   /** Daily totals in PHA from the latest actual day through 12 months later. */
   points: {date: string; total: number}[]
@@ -14,7 +15,8 @@ export interface Projection {
  * Circulating supply extended from its latest actual total: sunset claims at
  * the trailing 90-day average daily amount, capped at the unclaimed sunset
  * pool, plus the Vault reward reserve paid out at the current reward rate
- * until exhausted. No top-ups are assumed.
+ * until exhausted. No top-ups are assumed. An unreviewed Vault implementation
+ * leaves out the Vault component.
  */
 export const projectCirculation = (
   {
@@ -45,7 +47,9 @@ export const projectCirculation = (
       0,
     ) / Math.max(1, window.length)
   const sunsetPool = chain?.sunsetReward ?? 0
-  const rewardsPerDay = (vault.at(-1)?.rewardRate ?? 0) * 86_400
+  const latestVault = vault.at(-1)
+  const reviewed = latestVault?.vaultImplementationReviewed !== false
+  const rewardsPerDay = reviewed ? (latestVault?.rewardRate ?? 0) * 86_400 : 0
   const reserve = Math.max(0, chain?.vaultReward ?? 0)
   const end = new Date(`${start.date}T00:00:00Z`)
   end.setUTCFullYear(end.getUTCFullYear() + 1)
@@ -61,5 +65,9 @@ export const projectCirculation = (
     })
     date = shiftDate(date)
   }
-  return {method: 'trend', generatedAt: now.toISOString(), points}
+  return {
+    method: reviewed ? 'trend' : 'trend-claims-only',
+    generatedAt: now.toISOString(),
+    points,
+  }
 }

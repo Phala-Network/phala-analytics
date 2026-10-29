@@ -1,8 +1,8 @@
 import {expect, test} from 'bun:test'
 import type {GraphRequest} from './circulation/subgraph'
-import {readLive} from './live'
+import {LIVE_TIMEOUT_MS, readLive} from './live'
 
-const config = {ethereumUrl: 'https://ethereum.test/gn', timeoutMs: 50}
+const config = {ethereumUrl: 'https://ethereum.test/gn'}
 const token = (amount: number) => String(BigInt(amount) * 10n ** 18n)
 const now = Math.floor(Date.now() / 1000)
 const data = (latest: Record<string, unknown> = {}) => ({
@@ -89,4 +89,23 @@ test('rejects stale, unreviewed, erroring and malformed subgraph reads', async (
     },
   ])
     await expect(readLive(config, request)).rejects.toThrow()
+})
+
+test('gives up after its own short timeout', async () => {
+  expect(LIVE_TIMEOUT_MS).toBe(2000)
+  const started = Date.now()
+  await expect(
+    readLive(
+      config,
+      (_url, init) =>
+        new Promise((_resolve, reject) =>
+          init?.signal?.addEventListener('abort', () =>
+            reject(init.signal?.reason),
+          ),
+        ),
+    ),
+  ).rejects.toThrow('Subgraph request failed')
+  const elapsed = Date.now() - started
+  expect(elapsed).toBeGreaterThanOrEqual(LIVE_TIMEOUT_MS - 50)
+  expect(elapsed).toBeLessThan(LIVE_TIMEOUT_MS + 1000)
 })

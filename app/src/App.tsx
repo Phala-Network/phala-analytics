@@ -133,6 +133,7 @@ const derive = (data: AnalyticsData) => {
       vcpu: cloud('totalVcpu'),
       captured: cloud('captured'),
     },
+    claimsOnlyProjection: data.projection.method === 'trend-claims-only',
     rows: {
       circulation,
       circulationProjected: withProjection(circulation, data.projection.points),
@@ -313,6 +314,8 @@ export function App() {
                     90-day daily average until the unclaimed pool runs out and
                     the Vault reward reserve pays out at the current reward rate
                     until exhausted, with no top-ups.
+                    {view?.claimsOnlyProjection &&
+                      ' While the Vault implementation is under review, the projection includes claims only.'}
                   </>
                 }
               />

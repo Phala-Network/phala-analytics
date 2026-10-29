@@ -25,11 +25,13 @@ const input = ({
   vaultReward = 1_000,
   rewardRate = 1 / 864,
   claimRows = claims(['2026-10-28'], 10),
+  reviewed = true,
 }: {
   sunsetReward?: number
   vaultReward?: number
   rewardRate?: number
   claimRows?: ClaimDay[]
+  reviewed?: boolean
 }) =>
   ({
     circulation: [
@@ -44,7 +46,13 @@ const input = ({
         vaultReward,
       },
     ],
-    vault: [{...parseDay(vaultDay('2026-10-29'), VAULT_FIELDS), rewardRate}],
+    vault: [
+      {
+        ...parseDay(vaultDay('2026-10-29'), VAULT_FIELDS),
+        rewardRate,
+        vaultImplementationReviewed: reviewed,
+      },
+    ],
     claims: claimRows,
   }) as Pick<
     AnalyticsData,
@@ -101,4 +109,10 @@ test('averages claims over the trailing 90 flow days only', () => {
     now,
   )
   expect(short.points[1]?.total).toBe(504)
+})
+
+test('an unreviewed Vault implementation projects claims only', () => {
+  const {method, points} = projectCirculation(input({reviewed: false}), now)
+  expect(method).toBe('trend-claims-only')
+  expect(points[1]).toEqual({date: '2026-10-30', total: 510})
 })
