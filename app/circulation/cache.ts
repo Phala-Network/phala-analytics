@@ -11,6 +11,7 @@ export const createCached = (
     ttlSeconds: number,
     compute: () => Promise<T>,
   ): Promise<T> => {
+    // A cancelled originating request can give concurrent waiters an uncached 503.
     const pending = inflight.get(key)
     if (pending) return pending as Promise<T>
     const request = new Request(

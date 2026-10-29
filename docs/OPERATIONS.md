@@ -101,7 +101,8 @@ deleting a version. These limits also apply during rollback.
    use tag URLs; the Worker tracks `_meta.deployment` and reloads chain-derived
    cache rows after it changes.
 5. Deploy a fresh Worker version to change the circulation Cache API namespace.
-   Existing daily CDN responses can take up to one day to expire.
+   Existing client responses can persist for 60 seconds (latest) or 3600 seconds
+   (snapshots); there is no edge CDN cache.
    Verify plain-number output, `/api/all` totals and sampled daily values
    against `ChainDay`, confirm both JSON endpoints have `base: null`, and
    check the apps claim logs.

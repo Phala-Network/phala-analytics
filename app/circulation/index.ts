@@ -6,8 +6,8 @@ import {ConfigError, readConfig} from './config.js'
 import {getSnapshot, parseSnapshotDate, SnapshotDateError} from './snapshot.js'
 import {SubgraphError} from './subgraph.js'
 
-// Each layer bounds upstream load: the CDN caches per URL and region, and
-// `cached` computes each key at most once per TTL behind it.
+// Worker Cache API entries are scoped by version; concurrent misses share work.
+// Client max-age is 60s for latest and 3600s for snapshots; no edge CDN cache is used.
 const LATEST_TTL_SECONDS = 60
 const LATEST_CACHE_CONTROL = 'public, max-age=60'
 // ChainDay snapshots are immutable within a subgraph deployment.
