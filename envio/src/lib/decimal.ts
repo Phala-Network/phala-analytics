@@ -24,7 +24,11 @@ export function ratio(numerator: bigint, denominator: bigint): BigDecimal {
 }
 
 /** rewardRate * 31536000 * (10000 - treasuryRatio) / 10000 / total, step by step. */
-export function aprOf(rewardRate: bigint, treasuryRatio: bigint, total: bigint): BigDecimal {
+export function aprOf(
+  rewardRate: bigint,
+  treasuryRatio: bigint,
+  total: bigint,
+): BigDecimal {
   let x = norm(new Exact((rewardRate * 31536000n).toString()));
   x = norm(x.times((10000n - treasuryRatio).toString()));
   x = norm(x.div("10000"));

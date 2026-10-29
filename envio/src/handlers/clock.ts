@@ -11,7 +11,9 @@ indexer.onBlock(
     name: "Clock",
     where: ({ chain }) => {
       if (chain.id !== 1) return false;
-      return { block: { number: { _gte: CLOCK_START_BLOCK, _every: CLOCK_EVERY } } };
+      return {
+        block: { number: { _gte: CLOCK_START_BLOCK, _every: CLOCK_EVERY } },
+      };
     },
   },
   async ({ block, context }) => {

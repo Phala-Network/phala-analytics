@@ -62,7 +62,10 @@ export function inS(address: string): boolean {
   return address.toLowerCase() === ZERO || component(address) !== undefined;
 }
 /** The set S: tracked addresses plus the zero address (mint/burn). */
-export const S_ADDRESSES = [ZERO, ...Object.keys(COMPONENT_BY_ADDRESS)] as `0x${string}`[];
+export const S_ADDRESSES = [
+  ZERO,
+  ...Object.keys(COMPONENT_BY_ADDRESS),
+] as `0x${string}`[];
 
 export function date(timestamp: bigint): string {
   return new Date(Number(timestamp) * 1000).toISOString().slice(0, 10);

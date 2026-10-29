@@ -21,13 +21,17 @@ const DEFAULT_RPC = [
   "https://eth-mainnet.public.blastapi.io",
 ];
 const urls = process.env.ENVIO_RPC_URL
-  ? process.env.ENVIO_RPC_URL.split(",").map((u) => u.trim()).filter(Boolean)
+  ? process.env.ENVIO_RPC_URL.split(",")
+      .map((u) => u.trim())
+      .filter(Boolean)
   : DEFAULT_RPC;
 
 const client = createPublicClient({
   chain: mainnet,
   transport: fallback(
-    urls.map((url) => http(url, { batch: { batchSize: 20 }, retryCount: 5, timeout: 30_000 })),
+    urls.map((url) =>
+      http(url, { batch: { batchSize: 20 }, retryCount: 5, timeout: 30_000 }),
+    ),
   ),
 });
 
@@ -70,8 +74,11 @@ async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (error) {
-      if (attempt >= 10) throw new Error(`${what} failed after ${attempt} attempts: ${error}`);
-      console.warn(`RPC retry ${attempt} for ${what}: ${String(error).split("\n")[0]}`);
+      if (attempt >= 10)
+        throw new Error(`${what} failed after ${attempt} attempts: ${error}`);
+      console.warn(
+        `RPC retry ${attempt} for ${what}: ${String(error).split("\n")[0]}`,
+      );
       await new Promise((r) => setTimeout(r, delay));
       delay = Math.min(delay * 2, 20_000);
     }
@@ -118,19 +125,24 @@ export const vaultReads = createEffect(
         blockNumber: BigInt(blockNumber),
       }),
     );
-    const values: (bigint | boolean | undefined)[] = GETTERS.map((functionName, i) => {
-      const r = results[i];
-      if (!r?.success) return undefined;
-      try {
-        return decodeFunctionResult({ abi: vaultAbi, functionName, data: r.returnData }) as
-          | bigint
-          | boolean;
-      } catch {
-        return undefined;
-      }
-    });
+    const values: (bigint | boolean | undefined)[] = GETTERS.map(
+      (functionName, i) => {
+        const r = results[i];
+        if (!r?.success) return undefined;
+        try {
+          return decodeFunctionResult({
+            abi: vaultAbi,
+            functionName,
+            data: r.returnData,
+          }) as bigint | boolean;
+        } catch {
+          return undefined;
+        }
+      },
+    );
     const ok = values.every((v) => v !== undefined);
-    const big = (i: number) => (typeof values[i] === "bigint" ? (values[i] as bigint) : 0n);
+    const big = (i: number) =>
+      typeof values[i] === "bigint" ? (values[i] as bigint) : 0n;
     return {
       ok,
       checkpointTime: big(0),

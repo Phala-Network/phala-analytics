@@ -4,10 +4,21 @@
 // the same order: From side first, then To side.
 import { indexer } from "envio";
 import { component, inS, logId, S_ADDRESSES, ZERO } from "../lib/constants";
-import { type Block, chainState, closeDaysUpTo, refreshLatest, type Store } from "../lib/state";
+import {
+  type Block,
+  chainState,
+  closeDaysUpTo,
+  refreshLatest,
+  type Store,
+} from "../lib/state";
 import { loadStore, saveStore } from "../lib/store";
 
-function applySide(store: Store, block: Block, address: string, delta: bigint): void {
+function applySide(
+  store: Store,
+  block: Block,
+  address: string,
+  delta: bigint,
+): void {
   closeDaysUpTo(store, block);
   const state = chainState(store);
   const field = component(address);
@@ -25,7 +36,10 @@ indexer.onEvent(
   },
   async ({ event, context }) => {
     const store = await loadStore(context);
-    const block = { number: BigInt(event.block.number), timestamp: BigInt(event.block.timestamp) };
+    const block = {
+      number: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
+    };
     const { from, to, value } = event.params;
     // Each log is stored once, even S to S.
     if (inS(from) || inS(to)) {

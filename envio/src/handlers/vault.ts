@@ -24,12 +24,19 @@ interface Ev {
 }
 
 // Daily closure happens BEFORE the checkpoint reads are applied.
-function begin(store: Store, ev: Ev, reads: Reads, implementation?: string): VaultStateM {
+function begin(
+  store: Store,
+  ev: Ev,
+  reads: Reads,
+  implementation?: string,
+): VaultStateM {
   closeDaysUpTo(store, ev.block);
   const state = store.vault ?? newVault();
   if (implementation !== undefined) state.implementation = implementation;
   state.vaultImplementationReviewed = state.implementation === IMPLEMENTATION;
-  state.accrualMode = state.vaultImplementationReviewed ? "formula" : "checkpoint-only";
+  state.accrualMode = state.vaultImplementationReviewed
+    ? "formula"
+    : "checkpoint-only";
   if (reads.ok) {
     state.checkpointTime = reads.checkpointTime;
     state.checkpointTotalAssets = reads.checkpointTotalAssets;
@@ -96,7 +103,10 @@ async function prelude(event: RawEvent, context: EvmOnEventContext) {
   const reads = await context.effect(vaultReads, event.block.number);
   const store = await loadStore(context);
   const ev: Ev = {
-    block: { number: BigInt(event.block.number), timestamp: BigInt(event.block.timestamp) },
+    block: {
+      number: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
+    },
     logIndex: event.logIndex,
     hash: event.transaction.hash,
   };
@@ -105,63 +115,104 @@ async function prelude(event: RawEvent, context: EvmOnEventContext) {
 
 const fields = { block: ["timestamp"], transaction: ["hash"] } as const;
 
-indexer.onEvent({ contract: "Vault", event: "Withdraw", fields }, async ({ event, context }) => {
-  const { reads, store, ev } = await prelude(event, context);
-  const state = begin(store, ev, reads);
-  state.unstakeLocked += event.params.assets;
-  state.withdrawRequests += event.params.assets;
-  state.withdrawRequestCount += 1n;
-  finish(context, store, ev, state, "Withdraw", event.params.assets, event.params.shares);
-  saveStore(context, store);
-});
+indexer.onEvent(
+  { contract: "Vault", event: "Withdraw", fields },
+  async ({ event, context }) => {
+    const { reads, store, ev } = await prelude(event, context);
+    const state = begin(store, ev, reads);
+    state.unstakeLocked += event.params.assets;
+    state.withdrawRequests += event.params.assets;
+    state.withdrawRequestCount += 1n;
+    finish(
+      context,
+      store,
+      ev,
+      state,
+      "Withdraw",
+      event.params.assets,
+      event.params.shares,
+    );
+    saveStore(context, store);
+  },
+);
 
-indexer.onEvent({ contract: "Vault", event: "Claimed", fields }, async ({ event, context }) => {
-  const { reads, store, ev } = await prelude(event, context);
-  const state = begin(store, ev, reads);
-  state.unstakeLocked -= event.params.assets;
-  state.claims += event.params.assets;
-  state.claimCount += 1n;
-  finish(context, store, ev, state, "Claimed", event.params.assets, 0n);
-  saveStore(context, store);
-});
+indexer.onEvent(
+  { contract: "Vault", event: "Claimed", fields },
+  async ({ event, context }) => {
+    const { reads, store, ev } = await prelude(event, context);
+    const state = begin(store, ev, reads);
+    state.unstakeLocked -= event.params.assets;
+    state.claims += event.params.assets;
+    state.claimCount += 1n;
+    finish(context, store, ev, state, "Claimed", event.params.assets, 0n);
+    saveStore(context, store);
+  },
+);
 
-indexer.onEvent({ contract: "Vault", event: "Deposit", fields }, async ({ event, context }) => {
-  const { reads, store, ev } = await prelude(event, context);
-  const state = begin(store, ev, reads);
-  // Cancelled unstake requests redeposit from the Vault itself.
-  if (event.params.sender === VAULT) state.unstakeLocked -= event.params.assets;
-  state.deposits += event.params.assets;
-  state.depositCount += 1n;
-  finish(context, store, ev, state, "Deposit", event.params.assets, event.params.shares);
-  saveStore(context, store);
-});
+indexer.onEvent(
+  { contract: "Vault", event: "Deposit", fields },
+  async ({ event, context }) => {
+    const { reads, store, ev } = await prelude(event, context);
+    const state = begin(store, ev, reads);
+    // Cancelled unstake requests redeposit from the Vault itself.
+    if (event.params.sender === VAULT)
+      state.unstakeLocked -= event.params.assets;
+    state.deposits += event.params.assets;
+    state.depositCount += 1n;
+    finish(
+      context,
+      store,
+      ev,
+      state,
+      "Deposit",
+      event.params.assets,
+      event.params.shares,
+    );
+    saveStore(context, store);
+  },
+);
 
-indexer.onEvent({ contract: "Vault", event: "RewardsSettled", fields }, async ({ event, context }) => {
-  const { reads, store, ev } = await prelude(event, context);
-  const state = begin(store, ev, reads);
-  state.dailyRewards += event.params.rewards;
-  state.settlementTotalAssets = event.params.totalAssets;
-  finish(context, store, ev, state, "RewardsSettled", event.params.rewards, 0n, event.params.totalAssets);
-  saveStore(context, store);
-});
+indexer.onEvent(
+  { contract: "Vault", event: "RewardsSettled", fields },
+  async ({ event, context }) => {
+    const { reads, store, ev } = await prelude(event, context);
+    const state = begin(store, ev, reads);
+    state.dailyRewards += event.params.rewards;
+    state.settlementTotalAssets = event.params.totalAssets;
+    finish(
+      context,
+      store,
+      ev,
+      state,
+      "RewardsSettled",
+      event.params.rewards,
+      0n,
+      event.params.totalAssets,
+    );
+    saveStore(context, store);
+  },
+);
 
-indexer.onEvent({ contract: "Vault", event: "TreasurySettled", fields }, async ({ event, context }) => {
-  const { reads, store, ev } = await prelude(event, context);
-  const state = begin(store, ev, reads);
-  state.dailyTreasuryRewards += event.params.treasuryRewards;
-  state.treasurySettlementCount += 1n;
-  finish(
-    context,
-    store,
-    ev,
-    state,
-    "TreasurySettled",
-    event.params.treasuryRewards,
-    0n,
-    event.params.treasuryAssets,
-  );
-  saveStore(context, store);
-});
+indexer.onEvent(
+  { contract: "Vault", event: "TreasurySettled", fields },
+  async ({ event, context }) => {
+    const { reads, store, ev } = await prelude(event, context);
+    const state = begin(store, ev, reads);
+    state.dailyTreasuryRewards += event.params.treasuryRewards;
+    state.treasurySettlementCount += 1n;
+    finish(
+      context,
+      store,
+      ev,
+      state,
+      "TreasurySettled",
+      event.params.treasuryRewards,
+      0n,
+      event.params.treasuryAssets,
+    );
+    saveStore(context, store);
+  },
+);
 
 indexer.onEvent(
   { contract: "Vault", event: "TreasuryAssetsClaimed", fields },
@@ -169,7 +220,15 @@ indexer.onEvent(
     const { reads, store, ev } = await prelude(event, context);
     const state = begin(store, ev, reads);
     state.treasuryClaims += event.params.assets;
-    finish(context, store, ev, state, "TreasuryAssetsClaimed", event.params.assets, 0n);
+    finish(
+      context,
+      store,
+      ev,
+      state,
+      "TreasuryAssetsClaimed",
+      event.params.assets,
+      0n,
+    );
     saveStore(context, store);
   },
 );
@@ -193,24 +252,30 @@ async function updateHolder(
 }
 
 // Vault share transfers maintain Holder balances and the staker count.
-indexer.onEvent({ contract: "Vault", event: "Transfer", fields }, async ({ event, context }) => {
-  const { reads, store, ev } = await prelude(event, context);
-  const state = begin(store, ev, reads);
-  const { from, to, value } = event.params;
-  if (from !== to) {
-    await updateHolder(context, state, from, -value);
-    await updateHolder(context, state, to, value);
-  }
-  finish(context, store, ev, state, "Transfer", 0n, value);
-  saveStore(context, store);
-});
+indexer.onEvent(
+  { contract: "Vault", event: "Transfer", fields },
+  async ({ event, context }) => {
+    const { reads, store, ev } = await prelude(event, context);
+    const state = begin(store, ev, reads);
+    const { from, to, value } = event.params;
+    if (from !== to) {
+      await updateHolder(context, state, from, -value);
+      await updateHolder(context, state, to, value);
+    }
+    finish(context, store, ev, state, "Transfer", 0n, value);
+    saveStore(context, store);
+  },
+);
 
-indexer.onEvent({ contract: "Vault", event: "Upgraded", fields }, async ({ event, context }) => {
-  const { reads, store, ev } = await prelude(event, context);
-  const state = begin(store, ev, reads, event.params.implementation);
-  finish(context, store, ev, state, "Upgraded", 0n, 0n);
-  saveStore(context, store);
-});
+indexer.onEvent(
+  { contract: "Vault", event: "Upgraded", fields },
+  async ({ event, context }) => {
+    const { reads, store, ev } = await prelude(event, context);
+    const state = begin(store, ev, reads, event.params.implementation);
+    finish(context, store, ev, state, "Upgraded", 0n, 0n);
+    saveStore(context, store);
+  },
+);
 
 // Administration events only record a VaultEvent with fresh checkpoint reads.
 const ADMIN_EVENTS = [
@@ -225,10 +290,13 @@ const ADMIN_EVENTS = [
   "OwnershipTransferred",
 ] as const;
 for (const kind of ADMIN_EVENTS) {
-  indexer.onEvent({ contract: "Vault", event: kind, fields }, async ({ event, context }) => {
-    const { reads, store, ev } = await prelude(event, context);
-    const state = begin(store, ev, reads);
-    finish(context, store, ev, state, kind, 0n, 0n);
-    saveStore(context, store);
-  });
+  indexer.onEvent(
+    { contract: "Vault", event: kind, fields },
+    async ({ event, context }) => {
+      const { reads, store, ev } = await prelude(event, context);
+      const state = begin(store, ev, reads);
+      finish(context, store, ev, state, kind, 0n, 0n);
+      saveStore(context, store);
+    },
+  );
 }

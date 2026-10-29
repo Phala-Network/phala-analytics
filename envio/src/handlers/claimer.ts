@@ -1,9 +1,21 @@
 // Port of subgraph/src/claimer.ts (Khala and Phala sunset claimers).
 import { indexer } from "envio";
-import { type Block, chainState, closeDaysUpTo, refreshLatest, type Store } from "../lib/state";
+import {
+  type Block,
+  chainState,
+  closeDaysUpTo,
+  refreshLatest,
+  type Store,
+} from "../lib/state";
 import { loadStore, saveStore } from "../lib/store";
 
-function addClaim(store: Store, block: Block, chain: "khala" | "phala", free: bigint, staked: bigint) {
+function addClaim(
+  store: Store,
+  block: Block,
+  chain: "khala" | "phala",
+  free: bigint,
+  staked: bigint,
+) {
   const state = chainState(store);
   state.claimsStarted = true;
   if (chain === "khala") {
@@ -19,10 +31,17 @@ function addClaim(store: Store, block: Block, chain: "khala" | "phala", free: bi
 }
 
 indexer.onEvent(
-  { contract: "KhalaClaimer", event: "Claimed", fields: { block: ["timestamp"], transaction: ["hash"] } },
+  {
+    contract: "KhalaClaimer",
+    event: "Claimed",
+    fields: { block: ["timestamp"], transaction: ["hash"] },
+  },
   async ({ event, context }) => {
     const store = await loadStore(context);
-    const block = { number: BigInt(event.block.number), timestamp: BigInt(event.block.timestamp) };
+    const block = {
+      number: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
+    };
     closeDaysUpTo(store, block);
     context.Claimed.set({
       id: `${event.transaction.hash}-${event.logIndex}`,
@@ -48,7 +67,10 @@ indexer.onEvent(
   },
   async ({ event, context }) => {
     const store = await loadStore(context);
-    const block = { number: BigInt(event.block.number), timestamp: BigInt(event.block.timestamp) };
+    const block = {
+      number: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
+    };
     closeDaysUpTo(store, block);
     context.ClaimedAndBridged.set({
       id: `${event.transaction.hash}-${event.logIndex}`,

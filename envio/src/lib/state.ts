@@ -119,7 +119,10 @@ export interface Assets {
 // Sourcify Vault._calculateRewards: treasuryRatio is basis points; round
 // treasury down first, then give the remainder to shareholders.
 // Like the subgraph, this can mark the (saved) state unreviewed as a side effect.
-export function assetsAt(state: VaultStateM | undefined, timestamp: bigint): Assets {
+export function assetsAt(
+  state: VaultStateM | undefined,
+  timestamp: bigint,
+): Assets {
   if (!state) return { total: 0n, treasury: 0n };
   if (
     state.vaultImplementationReviewed &&
@@ -128,7 +131,11 @@ export function assetsAt(state: VaultStateM | undefined, timestamp: bigint): Ass
     markUnreviewed(state);
   }
   let total = 0n;
-  if (state.vaultImplementationReviewed && !state.paused && state.shareSupply > 0n) {
+  if (
+    state.vaultImplementationReviewed &&
+    !state.paused &&
+    state.shareSupply > 0n
+  ) {
     total = state.rewardRate * (timestamp - state.checkpointTime);
   }
   // BigInt.div truncates toward zero in graph-ts and in JS alike.
@@ -139,15 +146,17 @@ export function assetsAt(state: VaultStateM | undefined, timestamp: bigint): Ass
   };
 }
 
-export function sharePrice(state: VaultStateM | undefined, total: bigint): BigDecimal {
+export function sharePrice(
+  state: VaultStateM | undefined,
+  total: bigint,
+): BigDecimal {
   if (!state || state.shareSupply === 0n) return ZERO_DECIMAL;
   return ratio(total, state.shareSupply);
 }
 
 export function apr(state: VaultStateM | undefined, total: bigint): BigDecimal {
   if (
-    !state ||
-    !state.vaultImplementationReviewed ||
+    !state?.vaultImplementationReviewed ||
     state.paused ||
     state.shareSupply === 0n ||
     total === 0n

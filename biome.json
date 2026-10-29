@@ -12,7 +12,9 @@
       "!!**/generated",
       "!!**/build",
       "!!**/tests/.bin",
-      "!!**/tests/.latest.json"
+      "!!**/tests/.latest.json",
+      "!!envio/.claude",
+      "!!envio/pnpm-lock.yaml"
     ]
   },
   "formatter": {
