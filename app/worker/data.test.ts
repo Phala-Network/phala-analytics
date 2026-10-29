@@ -6,7 +6,6 @@ import {
   cloudWindow,
   dailyPrices,
   priceUrls,
-  realtimeRow,
   selectCloudRows,
   shiftDate,
   utcDate,
@@ -184,12 +183,6 @@ test('subgraph days convert wei, retain false implementation flags and separate 
     parseDay({...vaultDay('2026-10-27'), flowDate: '2026-10-27'}, VAULT_FIELDS),
   ).toThrow()
   expect(() => utcDate('2026-02-30')).toThrow()
-  expect(
-    realtimeRow({
-      totalCirculation: '102',
-      ethereum: {timestamp: '2026-10-27T00:00:00Z'},
-    }).totalCirculation,
-  ).toBe(102)
 })
 
 test('subgraph BigDecimal values accept exponents and reject non-finite or malformed strings', () => {

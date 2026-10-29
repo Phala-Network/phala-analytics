@@ -51,13 +51,17 @@ export default function ChartArea({
   const colors = Object.fromEntries(
     series.map(({key, color}) => [`--color-${key}`, color]),
   )
-  // Stacks need numbers; whole PHA keep tooltips readable.
+  // Stacks need numbers where a row has the key; rows without it (projected
+  // days) leave a gap. Whole PHA keep tooltips readable.
   const chartData = rows.map((row) => ({
     date: row.date,
     ...Object.fromEntries(
       series.map(({key, stack}) => {
         const value = cellValue(row, key)
-        return [key, value == null ? (stack ? 0 : null) : Math.round(value)]
+        return [
+          key,
+          value == null ? (stack && key in row ? 0 : null) : Math.round(value),
+        ]
       }),
     ),
   }))
@@ -122,13 +126,14 @@ export default function ChartArea({
             />
           }
         />
-        {series.map(({key, stack}) => (
+        {series.map(({key, stack, dashed}) => (
           <Area
             key={key}
             dataKey={key}
             type="linear"
-            fill={`url(#${id}-${key})`}
+            fill={dashed ? 'none' : `url(#${id}-${key})`}
             stroke={`var(--color-${key})`}
+            strokeDasharray={dashed ? '4 4' : undefined}
             stackId={stack ? 'a' : undefined}
             isAnimationActive={false}
           />

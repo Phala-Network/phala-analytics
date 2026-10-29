@@ -21,7 +21,7 @@ export type ChainState = Record<(typeof AMOUNT_FIELDS)[number], bigint> & {
   observedBlockTimestamp: bigint
 }
 
-const STATE_FIELDS = `chain timestamp observedBlockNumber observedBlockTimestamp
+export const STATE_FIELDS = `chain timestamp observedBlockNumber observedBlockTimestamp
   vaultImplementationReviewed ${AMOUNT_FIELDS.join(' ')}`
 const MAX_AGE_SECONDS = 15n * 60n
 
@@ -30,7 +30,7 @@ export class SubgraphError extends Error {
 }
 
 // Read only known fields from untrusted JSON; missing fields fail validation.
-const field = (value: unknown, ...path: string[]): unknown => {
+export const field = (value: unknown, ...path: string[]): unknown => {
   let current = value
   for (const key of path) {
     if (
@@ -66,7 +66,10 @@ const reviewed = (value: unknown) => {
   }
 }
 
-const parseState = (value: unknown, indexedBlock: bigint): ChainState => {
+export const parseState = (
+  value: unknown,
+  indexedBlock: bigint,
+): ChainState => {
   reviewed(value)
   const amounts = Object.fromEntries(
     AMOUNT_FIELDS.map((key) => [
@@ -92,34 +95,25 @@ const parseState = (value: unknown, indexedBlock: bigint): ChainState => {
   return result
 }
 
-// One query to Ethereum. Daily reads also check current indexer freshness
-// and implementation safety, without Graph time-travel queries or RPC calls.
 export type GraphRequest = (
   url: string,
   init?: RequestInit,
 ) => Promise<Response>
 
-export const readSubgraph = async (
+// POSTs one query that selects `_meta` and `latest`, then checks indexing
+// errors, the reviewed Vault implementation and Latest freshness.
+export const queryLatest = async (
   config: Config,
-  date?: string,
+  query: string,
+  variables?: Record<string, string>,
   request: GraphRequest = fetch,
 ) => {
-  const query = date
-    ? `query Snapshot($date: ID!) {
-        latest(id: "current") { chain timestamp vaultImplementationReviewed }
-        chainDay(id: $date) { ${STATE_FIELDS} }
-        _meta { hasIndexingErrors block { number } }
-      }`
-    : `{
-        latest(id: "current") { ${STATE_FIELDS} }
-        _meta { hasIndexingErrors block { number } }
-      }`
   let body: unknown
   try {
     const response = await request(config.ethereumUrl, {
       method: 'POST',
       headers: {'content-type': 'application/json'},
-      body: JSON.stringify({query, variables: date ? {date} : undefined}),
+      body: JSON.stringify({query, variables}),
       signal: AbortSignal.timeout(config.timeoutMs),
     })
     if (!response.ok)
@@ -142,10 +136,42 @@ export const readSubgraph = async (
   const indexedAt = uint(field(latest, 'timestamp'))
   const age = BigInt(Math.floor(Date.now() / 1000)) - indexedAt
   if (age > MAX_AGE_SECONDS) throw new SubgraphError('Subgraph Latest is stale')
+  return {
+    data,
+    latest,
+    indexedBlock,
+    indexedAt,
+    lagSeconds: age > 0n ? age : 0n,
+  }
+}
+
+// One query to Ethereum. Daily reads also check current indexer freshness
+// and implementation safety, without Graph time-travel queries or RPC calls.
+export const readSubgraph = async (
+  config: Config,
+  date?: string,
+  request: GraphRequest = fetch,
+) => {
+  const query = date
+    ? `query Snapshot($date: ID!) {
+        latest(id: "current") { chain timestamp vaultImplementationReviewed }
+        chainDay(id: $date) { ${STATE_FIELDS} }
+        _meta { hasIndexingErrors block { number } }
+      }`
+    : `{
+        latest(id: "current") { ${STATE_FIELDS} }
+        _meta { hasIndexingErrors block { number } }
+      }`
+  const {data, latest, indexedBlock, indexedAt, lagSeconds} = await queryLatest(
+    config,
+    query,
+    date ? {date} : undefined,
+    request,
+  )
   const rawState = date ? field(data, 'chainDay') : latest
   const state = rawState === null ? null : parseState(rawState, indexedBlock)
   if (date && state && state.timestamp !== utcMidnight(date)) {
     throw new SubgraphError('Subgraph snapshot date differs')
   }
-  return {state, indexedAt, lagSeconds: age > 0n ? age : 0n}
+  return {state, indexedAt, lagSeconds}
 }

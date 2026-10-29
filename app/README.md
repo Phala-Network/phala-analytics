@@ -18,8 +18,6 @@ Cron `17 * * * *` runs at 17 minutes past each hour. Streams run sequentially;
 failures are reported independently and fail the invocation. Successful writes
 remain retryable. Do not overlap manual invocations with cron.
 
-- Realtime circulation uses the Worker's circulation reader directly, with
-  the same `totalCirculation` and Ethereum timestamp as `/api/all`.
 - The Ethereum subgraph supplies `ChainDay`, `VaultDay` and `ClaimDay`.
   Every invocation starts at `date_gt: MAX(date)` and fetches
   1,000-row pages with `orderBy: date` and ascending order. It advances to the
@@ -69,7 +67,7 @@ that cannot be fully rebuilt from the subgraph or archives.
 ### JSON API
 
 Only GET and HEAD are accepted (405 otherwise); unknown paths return 404.
-`/api/data` uses `Cache-Control: public, max-age=300`; static assets use the
+`/api/data` uses `Cache-Control: public, max-age=60`; static assets use the
 Workers Static Assets defaults.
 `/api/data` returns numeric quantities in **PHA**, not wei, with rows in
 ascending UTC date order:
@@ -78,6 +76,10 @@ ascending UTC date order:
 {
   generatedAt,
   realtime: { totalCirculation, timestamp },
+  live: {
+    timestamp, blockNumber, circulation, vaultTotalAssets, sharePrice, apr, stakers,
+    claims: { flowDate, khalaClaimCount, khalaFree, khalaStaked, phalaClaimCount, phalaFree, phalaStaked }
+  } | null,
   subgraphs: {
     ethereum: { deployment, timestamp, vaultImplementation, vaultImplementationReviewed, accrualMode } | null
   },
@@ -85,7 +87,8 @@ ascending UTC date order:
   chainCirculation: [{ date, chain, ...circulationComponents, ...implementationStatus }],
   vault: [{ date, flowDate, ...vaultMetrics, ...implementationStatus }],
   claims: [{ date, flowDate, khalaClaimCount, khalaFree, khalaStaked, phalaClaimCount, phalaFree, phalaStaked }],
-  cloud: [{ date, totalUsers, totalVms, runningVms, totalVcpu, runningVcpu, activeUsers, captured, backfilled }]
+  cloud: [{ date, totalUsers, totalVms, runningVms, totalVcpu, runningVcpu, activeUsers, captured, backfilled }],
+  projection: { method: "trend", generatedAt, points: [{ date, total }] }
 }
 ```
 
@@ -116,8 +119,26 @@ or null without a settlement.
 `rewardRate` is PHA/second and `treasuryRatio` is basis points. Claim counts and
 PHA amounts are daily flows, not cumulative totals.
 
+`live` is read from the subgraph's `Latest` and `ChainState` entities in one
+query on each request, alongside the D1 reads, and cached with the circulation
+API's Cache API helper for 60 seconds under the Worker version. It uses the
+circulation API's checks: no indexing errors, a reviewed Vault implementation
+and `Latest` at most 15 minutes old. Any failure is logged without upstream
+details, is not cached, and serves `live: null` with the daily rows.
+`live.circulation` equals `/api/circulation`; `live.claims` holds the claims
+so far on `flowDate`, the UTC date of `live.timestamp`. `realtime` repeats the
+live circulation and timestamp, or falls back to the latest daily `total` at
+its midnight.
+
+`projection` extends circulation 12 months past the latest daily row, one point
+per day starting with that row's `total`. Sunset claims continue at the average
+daily amount over the trailing 90 claim flow days, capped at the latest
+`sunsetReward` (the unclaimed pool), and the Vault reward reserve
+(`vaultReward`, floored at 0) is paid out at the latest `rewardRate` until
+exhausted; no top-ups are assumed. It is never mixed into `circulation`.
+
 Cloud's `runningVcpu`, `activeUsers`, and unpriced `captured` can be null.
-Missing realtime data or a D1 error returns a generic 503.
+A D1 error, or no served Ethereum daily row, returns a generic 503.
 `/api/health` is uncached and returns
 `{ok, generatedAt, ethereum, vault, claims, cloud, vaultImplementationReviewed}`,
 where stream values are the latest cached dates. It returns 503 if Ethereum's
@@ -146,6 +167,13 @@ Vault rewards are summed per ISO week (Monday to Sunday UTC) of their
 `flowDate` and drawn as bars. The latest week appears once its Sunday has a
 row; the first week may be partial because Vault history starts midweek.
 The data table lists each day, including the current week.
+Circulating supply, Vault total assets, APR, stakers and the claim totals use
+`live` when present, labeled with its UTC time; otherwise they show the latest
+daily rows. Live same-day claims are added to the daily totals only when the
+latest `claims` row's `date` equals `live.claims.flowDate`, so no day is skipped
+or counted twice around midnight. Charts and Phala Cloud stay daily. The
+circulation chart draws `projection` as a dashed line with a legend entry and a
+one-sentence description of the model; its data table lists actual days only.
 Sunset claims are shown as totals. APR is hidden while the latest Vault row is
 unreviewed.
 
@@ -231,8 +259,8 @@ behind their upgrade gate.
 ### Circulation API
 
 The same Worker serves `/api/circulation`, `/api/all`, and `/api/snapshot` from
-`worker/circulation/`, using the existing `GOLDSKY_ETHEREUM_URL` binding. The hourly
-realtime refresh calls the same circulation reader directly. D1-backed dashboard
+`worker/circulation/`, using the existing `GOLDSKY_ETHEREUM_URL` binding. The
+`/api/data` live block reuses its subgraph checks and Cache API helper. D1-backed dashboard
 routes keep their existing response contracts. There is no HTTP call through the
 legacy Vercel hostname. `VERSION` is a Worker version-metadata binding used to
 isolate circulation Cache API entries across releases.

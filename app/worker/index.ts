@@ -1,10 +1,9 @@
-import {createCirculationApi} from './circulation'
-import {
-  type AnalyticsData,
-  CIRCULATION_SERIES_START,
-  DAY_MS,
-  realtimeRow,
-} from './data'
+import {createCirculationApi, describeError} from './circulation'
+import {createCached} from './circulation/cache'
+import {readConfig} from './circulation/config'
+import {type AnalyticsData, CIRCULATION_SERIES_START, DAY_MS} from './data'
+import {type LiveData, readLive} from './live'
+import {projectCirculation} from './projection'
 import type {ChainDay, VaultDay} from './subgraph'
 import {sync} from './sync'
 
@@ -21,11 +20,15 @@ const statusRow = <T extends {vaultImplementationReviewed: boolean}>(
 export const analyticsData = async (
   db: D1Database,
   now: Date,
+  loadLive: () => Promise<LiveData | null>,
 ): Promise<AnalyticsData> => {
-  const [state, circulation, chainCirculation, vault, claims, cloud] =
-    await db.batch<Record<string, unknown>>([
+  const [
+    [state, circulation, chainCirculation, vault, claims, cloud] = [],
+    live,
+  ] = await Promise.all([
+    db.batch<Record<string, unknown>>([
       db.prepare(
-        "SELECT key, value FROM sync_state WHERE key IN ('realtime', 'subgraph:ethereum')",
+        "SELECT value FROM sync_state WHERE key = 'subgraph:ethereum'",
       ),
       db
         .prepare(`
@@ -53,26 +56,24 @@ export const analyticsData = async (
         running_vms AS runningVms, total_vcpu AS totalVcpu, running_vcpu AS runningVcpu,
         active_users AS activeUsers, captured, source FROM cloud_daily ORDER BY date
     `),
-    ])
-  const values = new Map(state?.results.map((row) => [row.key, row.value]))
-  const value = values.get('realtime')
+    ]),
+    loadLive(),
+  ])
+  const days = circulation?.results as AnalyticsData['circulation'] | undefined
+  const lastDay = days?.at(-1)
+  // Only an unsynchronized cache is unavailable; live failures keep the daily rows.
   if (
-    typeof value !== 'string' ||
-    !circulation ||
-    !chainCirculation ||
+    !days ||
+    !lastDay ||
+    !chainCirculation?.results.length ||
     !vault ||
     !claims ||
     !cloud
   )
     throw new Error('Analytics has not been synchronized')
-  const subgraph = values.get('subgraph:ethereum')
-  return {
-    generatedAt: now.toISOString(),
-    realtime: realtimeRow(JSON.parse(value)),
-    subgraphs: {
-      ethereum: typeof subgraph === 'string' ? JSON.parse(subgraph) : null,
-    },
-    circulation: circulation.results as AnalyticsData['circulation'],
+  const subgraph = state?.results[0]?.value
+  const rows = {
+    circulation: days,
     chainCirculation: (
       chainCirculation.results as StoredStatus<ChainDay>[]
     ).map(statusRow<ChainDay>),
@@ -86,10 +87,25 @@ export const analyticsData = async (
       vaultImplementationReviewed: row.vaultImplementationReviewed === 1,
     })),
     claims: claims.results as AnalyticsData['claims'],
+  }
+  return {
+    generatedAt: now.toISOString(),
+    realtime: live
+      ? {totalCirculation: live.circulation, timestamp: live.timestamp}
+      : {
+          totalCirculation: lastDay.total,
+          timestamp: `${lastDay.date}T00:00:00.000Z`,
+        },
+    live,
+    subgraphs: {
+      ethereum: typeof subgraph === 'string' ? JSON.parse(subgraph) : null,
+    },
+    ...rows,
     cloud: cloud.results.map(({source, ...row}) => ({
       ...row,
       backfilled: source === 'api-backfill',
     })) as AnalyticsData['cloud'],
+    projection: projectCirculation(rows, now),
   }
 }
 
@@ -136,6 +152,23 @@ const circulationApis = new WeakMap<
   Env,
   ReturnType<typeof createCirculationApi>
 >()
+const liveCaches = new WeakMap<Env, ReturnType<typeof createCached>>()
+
+// Live figures share the circulation API's Cache API store and 60-second TTL;
+// failures are not cached and leave the daily rows in place.
+const loadLive = async (env: Env) => {
+  let cached = liveCaches.get(env)
+  if (!cached) {
+    cached = createCached(caches.default, env.VERSION.id)
+    liveCaches.set(env, cached)
+  }
+  try {
+    return await cached('live', 60, () => readLive(readConfig(env)))
+  } catch (error) {
+    console.error(`Live data unavailable - ${describeError(error)}`)
+    return null
+  }
+}
 
 export const fetchHandler = async (
   request: Request,
@@ -164,9 +197,10 @@ export const fetchHandler = async (
   try {
     // Static assets (the dashboard) are served before the Worker; other paths are unknown.
     if (path === '/api/data') {
-      response = Response.json(await analyticsData(env.DB, new Date()), {
-        headers: {'Cache-Control': 'public, max-age=300'},
-      })
+      response = Response.json(
+        await analyticsData(env.DB, new Date(), () => loadLive(env)),
+        {headers: {'Cache-Control': 'public, max-age=60'}},
+      )
     } else if (path === '/api/health') {
       response = await health(env.DB, new Date())
     } else {

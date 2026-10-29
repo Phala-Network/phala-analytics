@@ -29,11 +29,13 @@ import {
   formatTimestamp,
 } from '@/lib/format'
 import {
+  claimTotals,
   latest,
   type Row,
   type Series,
   toRows,
   weeklyRewards,
+  withProjection,
 } from '@/lib/series'
 import type {AnalyticsData} from '../worker/data'
 
@@ -45,6 +47,12 @@ const CIRCULATION: Series[] = [
   {key: 'khala', label: 'Khala', color: 'var(--chart-1)', stack: true},
   {key: 'total', label: 'Total'},
 ]
+const PROJECTED: Series = {
+  key: 'projected',
+  label: 'Projected',
+  color: 'var(--chart-3)',
+  dashed: true,
+}
 const VAULT: Series[] = [
   {key: 'totalAssets', label: 'Total assets', color: 'var(--chart-2)'},
 ]
@@ -82,15 +90,20 @@ const CARDS_2 =
 const CHARTS = 'grid grid-cols-1 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-2'
 
 const derive = (data: AnalyticsData) => {
+  const {live} = data
   const vault = data.vault.at(-1)
   const reviewed = vault?.vaultImplementationReviewed !== false
-  const vaultAsOf = vault && `As of ${formatDay(vault.date)}`
-  const total = (...keys: (keyof AnalyticsData['claims'][number])[]) =>
-    data.claims.reduce(
-      (sum, row) => keys.reduce((part, key) => part + Number(row[key]), sum),
-      0,
-    )
-  const lastClaim = data.claims.at(-1)
+  // Live figures replace the latest daily row when the subgraph read succeeds.
+  const liveAsOf = live && `As of ${formatTimestamp(live.timestamp)}`
+  const vaultAsOf = liveAsOf ?? (vault && `As of ${formatDay(vault.date)}`)
+  const totalAssets = live?.vaultTotalAssets ?? vault?.totalAssets
+  const apr = live?.apr ?? vault?.apr
+  const stakers = live?.stakers ?? vault?.stakers
+  const claims = claimTotals(data.claims, live)
+  const circulation = toRows(
+    data.circulation,
+    ({ethereum, phala, khala, total}) => ({ethereum, phala, khala, total}),
+  )
   const cloud = (key: keyof AnalyticsData['cloud'][number]) => {
     const row = latest(data.cloud, key)
     return {
@@ -105,17 +118,13 @@ const derive = (data: AnalyticsData) => {
     vault: {
       reviewed,
       vaultAsOf,
-      totalAssets: vault ? formatNumber(vault.totalAssets) : '–',
-      apr: vault && reviewed ? formatPercent(vault.apr) : '–',
-      stakers: vault ? formatNumber(vault.stakers) : '–',
+      totalAssets: formatNumber(totalAssets),
+      apr: apr != null && reviewed ? formatPercent(apr) : '–',
+      stakers: formatNumber(stakers),
     },
-    claims: lastClaim && {
-      through: `Through ${formatDay(lastClaim.flowDate)}`,
-      count: [total('khalaClaimCount'), total('phalaClaimCount')] as const,
-      amount: [
-        total('khalaFree', 'khalaStaked'),
-        total('phalaFree', 'phalaStaked'),
-      ] as const,
+    claims: claims && {
+      ...claims,
+      asOf: claims.live ? liveAsOf : `Through ${formatDay(claims.through)}`,
     },
     cloud: {
       users: cloud('totalUsers'),
@@ -125,10 +134,8 @@ const derive = (data: AnalyticsData) => {
       captured: cloud('captured'),
     },
     rows: {
-      circulation: toRows(
-        data.circulation,
-        ({ethereum, phala, khala, total}) => ({ethereum, phala, khala, total}),
-      ),
+      circulation,
+      circulationProjected: withProjection(circulation, data.projection.points),
       vault: toRows(data.vault, ({totalAssets}) => ({totalAssets})),
       weeklyRewards: weeklyRewards(data.vault),
       dailyRewards: data.vault.map(({flowDate, dailyRewards}) => ({
@@ -294,10 +301,20 @@ export function App() {
             <div className="px-4 lg:px-6">
               <ChartCard
                 title="Circulating supply"
-                description="By chain at 00:00 UTC each day, stacked (PHA)"
-                rows={view?.rows.circulation}
-                series={CIRCULATION}
-                footer="Ethereum plus the Phala and Khala chains until their sunset. Base PHA is counted through the Ethereum Portal escrow."
+                description="By chain at 00:00 UTC each day, stacked, with a 12-month trend projection (PHA)"
+                rows={view?.rows.circulationProjected}
+                series={[...CIRCULATION, PROJECTED]}
+                table={{rows: view?.rows.circulation, series: CIRCULATION}}
+                footer={
+                  <>
+                    Ethereum plus the Phala and Khala chains until their sunset.
+                    Base PHA is counted through the Ethereum Portal escrow. The
+                    projection assumes sunset claims continue at their trailing
+                    90-day daily average until the unclaimed pool runs out and
+                    the Vault reward reserve pays out at the current reward rate
+                    until exhausted, with no top-ups.
+                  </>
+                }
               />
             </div>
           </Section>
@@ -363,7 +380,7 @@ export function App() {
                   claims &&
                   `Khala ${formatNumber(claims.count[0])} · Phala ${formatNumber(claims.count[1])}`
                 }
-                secondary={claims?.through}
+                secondary={claims?.asOf}
               />
               <MetricCard
                 label="PHA claimed"
@@ -377,7 +394,7 @@ export function App() {
                   claims &&
                   `Khala ${formatCompact(claims.amount[0])} · Phala ${formatCompact(claims.amount[1])}`
                 }
-                secondary={claims?.through}
+                secondary={claims?.asOf}
               />
             </div>
           </Section>
@@ -451,8 +468,9 @@ export function App() {
                   values are UTC days. Sources: the Phala Ethereum subgraph, the
                   archived Phala and Khala chain history, Phala Cloud usage
                   statistics, and daily PHA prices from Dune through September
-                  22, 2026 and DefiLlama (CoinGecko-sourced) after. Data
-                  refreshes hourly.
+                  22, 2026 and DefiLlama (CoinGecko-sourced) after. Supply,
+                  Vault and claim figures are read live from the subgraph,
+                  cached for up to a minute; daily data refreshes hourly.
                 </CardDescription>
               </CardHeader>
               <CardFooter>
