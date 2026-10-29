@@ -31,33 +31,33 @@ import {
 } from '@/lib/series'
 import type {AnalyticsData} from '../worker/data'
 
-// Single series use the primary color, as in dashboard-01; multiple series use
-// the theme's chart colors.
+// Chart colors are one hue from light (--chart-1) to dark (--chart-5); series
+// that share a chart use steps far apart.
 const CIRCULATION: Series[] = [
   {key: 'ethereum', label: 'Ethereum', color: 'var(--chart-2)', stack: true},
-  {key: 'phala', label: 'Phala', color: 'var(--chart-4)', stack: true},
+  {key: 'phala', label: 'Phala', color: 'var(--chart-5)', stack: true},
   {key: 'khala', label: 'Khala', color: 'var(--chart-1)', stack: true},
   {key: 'total', label: 'Total'},
 ]
 const VAULT: Series[] = [
-  {key: 'totalAssets', label: 'Total assets', color: 'var(--primary)'},
+  {key: 'totalAssets', label: 'Total assets', color: 'var(--chart-2)'},
 ]
 const REWARDS: Series[] = [
-  {key: 'average', label: '7-day average', color: 'var(--primary)'},
+  {key: 'average', label: '7-day average', color: 'var(--chart-2)'},
   {key: 'dailyRewards', label: 'Daily'},
 ]
 const USERS: Series[] = [
-  {key: 'totalUsers', label: 'Users', color: 'var(--primary)'},
+  {key: 'totalUsers', label: 'Users', color: 'var(--chart-2)'},
 ]
 const VMS: Series[] = [
   {key: 'totalVms', label: 'Total VMs', color: 'var(--chart-2)'},
-  {key: 'runningVms', label: 'Running VMs', color: 'var(--chart-4)'},
+  {key: 'runningVms', label: 'Running VMs', color: 'var(--chart-5)'},
 ]
 const VCPU: Series[] = [
-  {key: 'totalVcpu', label: 'Total vCPUs', color: 'var(--primary)'},
+  {key: 'totalVcpu', label: 'Total vCPUs', color: 'var(--chart-2)'},
 ]
 const REVENUE: Series[] = [
-  {key: 'captured', label: 'Annual revenue', color: 'var(--primary)'},
+  {key: 'captured', label: 'Annual revenue', color: 'var(--chart-2)'},
 ]
 
 const LINKS = [

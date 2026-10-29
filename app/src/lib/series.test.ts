@@ -38,11 +38,52 @@ test('daily rewards plot on their flow day with a trailing 7-day mean', () => {
   ])
 })
 
-test('the 7-day mean is null when the window spans a missing day', () => {
-  const dates = days('2026-01-01', 8).filter((date) => date !== '2026-01-04')
-  const rows = dailyRewards(vault([...dates].reverse(), [1, 1, 1, 1, 1, 1, 1]))
+test('the 7-day mean skips days without a row', () => {
+  const dates = days('2026-01-01', 9).filter((date) => date !== '2026-01-04')
+  const rows = dailyRewards(
+    vault([...dates].reverse(), [80, 70, 60, 50, 40, 30, 20, 10]),
+  )
   expect(rows.map((row) => row.date)).toEqual(dates)
-  expect(rows.every((row) => row.average === null)).toBe(true)
+  // Jan 4 has no row, so each window from Jan 7 to Jan 9 holds six rows.
+  expect(rows.map((row) => row.average)).toEqual([
+    null,
+    null,
+    null,
+    null,
+    null,
+    (10 + 20 + 30 + 40 + 50 + 60) / 6,
+    (20 + 30 + 40 + 50 + 60 + 70) / 6,
+    (30 + 40 + 50 + 60 + 70 + 80) / 6,
+  ])
+})
+
+test('the 7-day mean varies far less from day to day than daily rewards', () => {
+  // Settlement-driven rewards: about 40k a day, uneven, with quiet days.
+  let seed = 7
+  const random = () => {
+    seed = (seed * 48271) % 2147483647
+    return seed / 2147483647
+  }
+  const rewards = Array.from({length: 365}, () =>
+    random() < 0.15 ? 0 : 40_000 * (0.2 + 1.6 * random()),
+  )
+  const rows = dailyRewards(vault(days('2025-01-01', 365), rewards))
+  const variation = (key: string) => {
+    const values = rows
+      .map((row) => row[key])
+      .filter((value): value is number => typeof value === 'number')
+    return (
+      values
+        .slice(1)
+        .reduce(
+          (sum, value, index) =>
+            sum + Math.abs(value - (values[index] ?? value)),
+          0,
+        ) /
+      (values.length - 1)
+    )
+  }
+  expect(variation('average')).toBeLessThan(variation('dailyRewards') / 4)
 })
 
 test('backfilled Cloud days group into consecutive ranges', () => {

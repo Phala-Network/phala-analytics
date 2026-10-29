@@ -27,25 +27,29 @@ export const toRows = <T extends {date: string}>(
   rows.map((row) => ({date: row.date, time: dayTime(row.date), ...pick(row)}))
 
 /**
- * Daily Vault rewards on their flow day with a trailing 7-day mean. The mean is
- * null until seven consecutive UTC days are available.
+ * Daily Vault rewards on their flow day with a trailing 7-day mean: the mean
+ * of the rows dated within the last seven UTC days (quiet days count as 0; a
+ * day without a row is skipped). It is null for the first six days of history.
  */
 export const dailyRewards = (vault: AnalyticsData['vault']): Row[] => {
-  const rows = [...vault]
-    .map(({flowDate, dailyRewards}) => ({date: flowDate, dailyRewards}))
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const rows = vault
+    .map(({flowDate, dailyRewards}) => ({
+      date: flowDate,
+      time: dayTime(flowDate),
+      dailyRewards,
+    }))
+    .sort((a, b) => a.time - b.time)
+  const first = rows[0]?.time ?? 0
+  let start = 0
+  let sum = 0
   return rows.map((row, index) => {
-    const window = rows.slice(Math.max(0, index - 6), index + 1)
-    const complete =
-      window.length === 7 &&
-      dayTime(row.date) - dayTime(window[0]?.date ?? row.date) === 6 * DAY_MS
+    sum += row.dailyRewards
+    while ((rows[start]?.time ?? row.time) <= row.time - 7 * DAY_MS)
+      sum -= rows[start++]?.dailyRewards ?? 0
     return {
-      date: row.date,
-      time: dayTime(row.date),
-      dailyRewards: row.dailyRewards,
-      average: complete
-        ? window.reduce((sum, item) => sum + item.dailyRewards, 0) / 7
-        : null,
+      ...row,
+      average:
+        row.time - first >= 6 * DAY_MS ? sum / (index + 1 - start) : null,
     }
   })
 }
