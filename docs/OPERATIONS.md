@@ -95,8 +95,29 @@ deleting a version. These limits also apply during rollback.
    validate historical balances.
 3. Wait for sync. Query `Latest(id: "current")` and `_meta`: no indexing
    errors, `Latest.timestamp` within 15 minutes, reviewed Vault implementation.
-   Compare amounts, Vault checkpoints and complete claimer ID/field sets with
-   preserved independent references using the subgraph parity verifier.
+   From `subgraph/`, run the default upgrade verifier while `prod` still points
+   to the old version:
+
+   ```bash
+   bun run verify --candidate "$CANDIDATE_URL" --output upgrade-results.json
+   ```
+
+   It compares all immutable entities and current state at one common block
+   (`min(candidate head, prod head) - 64`), with exact ID/field/count equality
+   and reviewed Vault implementations. Preserve the report. For intentional
+   formula changes, add a narrow `--expect-diff Entity.field,...` list and
+   review the printed per-date differences before promotion. Other fields,
+   IDs, counts and safety flags must still match. `--production` can select an
+   explicit current version URL; changing either deployment during the run
+   invalidates verification. No deleted service or circulation API is a
+   reference. Historical archive gates are optional.
+
+   `prune: auto` limits old mutable versions and time travel; Goldsky's exact
+   retention window is operator-controlled. Run promptly after both versions
+   catch up. The verifier probes the common block and fails if it has been
+   pruned; wait for sync and restart near both heads. Reduce `--safety-margin`
+   only after assessing reorg risk. It never substitutes separate-head reads.
+   See the subgraph README for pruning semantics and archive inputs.
 4. Move `phala-ethereum/prod` to the verified version. Both the API and apps
    use tag URLs; the Worker tracks `_meta.deployment` and reloads chain-derived
    cache rows after it changes.

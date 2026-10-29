@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import fixture from "./fixtures/upgrade.json";
 import { args, claimers, load, main } from "./verify";
-import { type Row, record, snapshotDates, text } from "./verify-lib";
+import { PRODUCTION_URL } from "./verify-graph";
+import { type Row, record, rows, text } from "./verify-lib";
+import { compareEntities, ENTITIES, expectedFields } from "./verify-upgrade";
 
 let directory: string;
 beforeAll(async () => {
@@ -10,8 +13,309 @@ beforeAll(async () => {
 afterAll(async () => {
   if (directory) await rm(directory, { recursive: true });
 });
+const fixtures = record(fixture);
+function entityRows(type: string): Row[] {
+  return rows(structuredClone(fixtures[type]));
+}
 
-test("Ethereum loading and claimer exports use independent cutoffs", async () => {
+test("upgrade defaults and exemption validation reject obsolete references and safety overrides", () => {
+  const options = args(["--candidate", "https://candidate.test"]);
+  expect(options.stage).toBe("upgrade");
+  expect(options.production).toBe(PRODUCTION_URL);
+  expect(options.margin).toBe(64);
+  for (const margin of ["-1", "1.5", "NaN", "9007199254740992", ""]) {
+    expect(() =>
+      args([
+        "--candidate",
+        "https://candidate.test",
+        `--safety-margin=${margin}`,
+      ]),
+    ).toThrow("Invalid --safety-margin");
+  }
+  for (const field of [
+    "ChainDay.id",
+    "ChainDay.timestamp",
+    "Latest.vaultImplementationReviewed",
+    "VaultState.implementation",
+    "Latest.accrualMode",
+    "Transfer.transactionHash",
+  ]) {
+    expect(() => expectedFields(field)).toThrow("Cannot exempt");
+  }
+  expect(() => expectedFields("ChainDay.typo")).toThrow(
+    "Unknown expected field",
+  );
+  expect(expectedFields("ChainDay.circulation,Latest.circulation").size).toBe(
+    2,
+  );
+  for (const option of [
+    "--old-api",
+    "--old-vault",
+    "--old-khala",
+    "--old-phala",
+    "--base",
+    "--archive-rpc",
+    "--prefetch-snapshots",
+  ]) {
+    expect(() => args([option, "removed"])).toThrow("Unknown option");
+  }
+  expect(() =>
+    args(["--candidate", "https://candidate.test", "--stage", "server"]),
+  ).toThrow("Use --stage");
+  expect(() =>
+    args(["--candidate", "https://candidate.test", "--stage", "historical"]),
+  ).toThrow("at least one archive");
+});
+
+test("verification queries cover every field of every entity declared in the schema", async () => {
+  const schema = await readFile(`${import.meta.dir}/../schema.graphql`, "utf8");
+  const entities = [...schema.matchAll(/type (\w+) @entity[^{]+\{([^}]+)\}/g)];
+  expect(ENTITIES.map((entity) => entity.type).sort()).toEqual(
+    entities.map((entity) => text(entity[1])).sort(),
+  );
+  for (const entity of ENTITIES) {
+    const definition = entities.find((match) => match[1] === entity.type);
+    expect(entity.fields.split(" ").sort()).toEqual(
+      [...(definition?.[2] ?? "").matchAll(/(\w+):/g)]
+        .map((match) => text(match[1]))
+        .sort(),
+    );
+    expect(
+      compareEntities(
+        entity,
+        entityRows(entity.type),
+        entityRows(entity.type),
+        new Set(),
+      ),
+    ).toEqual([]);
+  }
+});
+
+test("exact comparison detects field, ID and count changes including decimals, nulls and event provenance", () => {
+  for (const entity of ENTITIES) {
+    const previous = entityRows(entity.type);
+    const row = previous[0];
+    expect(row).toBeDefined();
+    for (const field of entity.fields
+      .split(" ")
+      .filter(
+        (field) => !["id", "vaultImplementationReviewed"].includes(field),
+      )) {
+      const candidate = [
+        { ...row, [field]: row?.[field] === null ? "1" : null },
+      ];
+      const differences = compareEntities(
+        entity,
+        candidate,
+        previous,
+        new Set(),
+      );
+      expect(
+        differences.some((diff) => diff.field === field && !diff.expected),
+      ).toBe(true);
+    }
+    expect(() => compareEntities(entity, [], previous, new Set())).toThrow(
+      "count differs",
+    );
+    expect(() =>
+      compareEntities(entity, [{ ...row, id: "other" }], previous, new Set()),
+    ).toThrow();
+    if (row && "vaultImplementationReviewed" in row)
+      expect(() =>
+        compareEntities(
+          entity,
+          [{ ...row, vaultImplementationReviewed: false }],
+          previous,
+          new Set(),
+        ),
+      ).toThrow("unreviewed");
+  }
+});
+
+interface RequestRecord {
+  path: string;
+  query: string;
+  variables: Row;
+}
+function graphFixture() {
+  const requests: RequestRecord[] = [];
+  const state = {
+    pruned: false,
+    indexingErrors: false,
+    reviewedHead: true,
+    changedTag: false,
+    repeatedId: false,
+    diff: false,
+  };
+  const transfers = Array.from({ length: 1001 }, (_, index) => ({
+    ...entityRows("Transfer")[0],
+    id: `0x${(index + 1).toString(16).padStart(8, "0")}`,
+  }));
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname;
+      const body = record(await request.json());
+      const query = text(body.query);
+      const variables = record(body.variables);
+      requests.push({ path, query, variables });
+      const candidate = path === "/candidate";
+      if (!["/production", "/candidate"].includes(path))
+        return new Response(null, { status: 410 });
+      if (state.pruned && variables.block !== undefined)
+        return Response.json({
+          errors: [
+            { message: "historical state pruned (private endpoint omitted)" },
+          ],
+        });
+      const data: Row = {
+        _meta: {
+          deployment:
+            state.changedTag && variables.after !== undefined
+              ? "changed"
+              : candidate
+                ? "candidate"
+                : "production",
+          hasIndexingErrors: state.indexingErrors,
+          block: {
+            number: variables.block ?? (candidate ? 1100 : 1110),
+            timestamp: variables.block === undefined ? 1791590400 : null,
+          },
+        },
+      };
+      if (query.includes("latest(id:")) {
+        data.latest = {
+          id: "current",
+          vaultImplementationReviewed:
+            variables.block === undefined ? state.reviewedHead : true,
+        };
+        data.vaultState = { id: "current", vaultImplementationReviewed: true };
+      }
+      const entity = ENTITIES.find((item) => query.includes(`${item.entity}(`));
+      if (entity) {
+        let values =
+          entity.type === "Transfer" ? transfers : entityRows(entity.type);
+        if (candidate && state.diff && entity.type === "VaultDay")
+          values = values.map((value) => ({
+            ...value,
+            dailyRewards: "9007199254740993002",
+          }));
+        const cursor = text(variables.after);
+        data[entity.entity] =
+          state.repeatedId && cursor !== "0x" && entity.type === "Transfer"
+            ? transfers.slice(0, 1)
+            : values.filter((value) => text(value.id) > cursor).slice(0, 1000);
+      }
+      return Response.json({ data });
+    },
+  });
+  const argv = [
+    "--candidate",
+    `${server.url}candidate`,
+    "--production",
+    `${server.url}production`,
+    "--output",
+    `${directory}/upgrade.json`,
+  ];
+  return { server, state, requests, argv };
+}
+
+test("upgrade pins both deployments and every deterministic page, reports expected per-date diffs, and fails other changes", async () => {
+  const { server, state, requests, argv } = graphFixture();
+  try {
+    await main(argv);
+    const report = record(
+      JSON.parse(await readFile(`${directory}/upgrade.json`, "utf8")),
+    );
+    expect(report.status).toBe("pass");
+    expect(report.comparisonBlock).toBe(1036);
+    expect(record(record(report.entities).Transfer)).toEqual({
+      production: 1001,
+      candidate: 1001,
+    });
+    expect(record(record(report.entities).Holder)).toEqual({
+      production: 1,
+      candidate: 1,
+    });
+    expect(report.differences).toEqual([]);
+    const pages = requests.filter(
+      (request) => request.variables.after !== undefined,
+    );
+    expect(
+      pages.every(
+        (request) =>
+          request.variables.block === 1036 &&
+          request.query.includes("block:{number:$block}") &&
+          request.query.includes("orderBy:id,orderDirection:asc"),
+      ),
+    ).toBe(true);
+    expect(
+      pages
+        .filter((request) => request.query.includes("transfers("))
+        .map((request) => request.variables.after),
+    ).toEqual(["0x", "0x000003e8", "0x", "0x000003e8"]);
+    expect(
+      pages.find((request) => request.query.includes("chainDays("))?.query,
+    ).toContain("$after:ID!");
+    expect(
+      pages.find((request) => request.query.includes("transfers("))?.query,
+    ).toContain("$after:Bytes!");
+    state.diff = true;
+    await main([...argv, "--expect-diff", "VaultDay.dailyRewards"]);
+    const expected = record(
+      JSON.parse(await readFile(`${directory}/upgrade.json`, "utf8")),
+    );
+    expect(expected.status).toBe("pass");
+    expect(expected.diffSummary).toEqual([
+      {
+        date: "2026-10-10",
+        field: "VaultDay.dailyRewards",
+        count: 1,
+        previous: "9007199254740993001",
+        candidate: "9007199254740993002",
+        delta: "1",
+        expected: true,
+      },
+    ]);
+    await expect(
+      main([...argv, "--expect-diff", "ChainDay.circulation"]),
+    ).rejects.toThrow("Unexpected field differences: 1");
+    expect(
+      JSON.parse(await readFile(`${directory}/upgrade.json`, "utf8")).status,
+    ).toBe("fail");
+  } finally {
+    await server.stop(true);
+  }
+}, 40000);
+
+test("upgrade fails closed on pruned blocks, indexing errors, head review changes, tag movement and repeated pagination", async () => {
+  const { server, state, argv } = graphFixture();
+  try {
+    state.pruned = true;
+    await expect(main(argv)).rejects.toThrow("possibly pruned");
+    state.pruned = false;
+    state.indexingErrors = true;
+    await expect(main(argv)).rejects.toThrow("indexing errors");
+    state.indexingErrors = false;
+    state.reviewedHead = false;
+    await expect(main(argv)).rejects.toThrow(
+      "Unreviewed candidate Vault implementation at head",
+    );
+    state.reviewedHead = true;
+    state.changedTag = true;
+    await expect(main(argv)).rejects.toThrow("Deployment changed");
+    state.changedTag = false;
+    state.repeatedId = true;
+    await expect(main(argv)).rejects.toThrow(
+      "Unordered or repeated pagination ID",
+    );
+  } finally {
+    await server.stop(true);
+  }
+}, 30000);
+
+test("historical claimer gates use only supplied exports and their independent cutoffs", async () => {
   const requests: { path: string; query: string; cutoff: unknown }[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -27,28 +331,15 @@ test("Ethereum loading and claimer exports use independent cutoffs", async () =>
       if (query.includes("_meta"))
         data = {
           _meta: {
-            deployment: "new",
+            deployment: "candidate",
             hasIndexingErrors: false,
-            block: { number: 102, timestamp: Math.floor(Date.now() / 1000) },
+            block: { number: 102, timestamp: 1791590400 },
           },
         };
       else if (query.includes("latest"))
-        data = {
-          latest: {
-            timestamp: String(Math.floor(Date.now() / 1000)),
-            vaultImplementationReviewed: true,
-          },
-        };
+        data = { latest: { vaultImplementationReviewed: true } };
       else if (query.includes("chainDays"))
-        data = {
-          chainDays: [
-            {
-              id: "2026-10-10",
-              date: "2026-10-10",
-              vaultImplementationReviewed: true,
-            },
-          ],
-        };
+        data = { chainDays: entityRows("ChainDay") };
       else if (query.includes("vaultDays")) data = { vaultDays: [] };
       else if (query.includes("vaultEvents")) data = { vaultEvents: [] };
       else if (query.includes("claimedAndBridgeds"))
@@ -59,7 +350,7 @@ test("Ethereum loading and claimer exports use independent cutoffs", async () =>
     },
   });
   try {
-    const paths = [];
+    const paths: string[] = [];
     for (const [chain, block] of [
       ["khala", 100],
       ["phala", 101],
@@ -82,19 +373,16 @@ test("Ethereum loading and claimer exports use independent cutoffs", async () =>
       );
     }
     const options = args([
-      "--ethereum",
+      "--stage",
+      "historical",
+      "--candidate",
       `${server.url}ethereum`,
-      "--old-khala",
-      `${server.url}deleted-khala`,
-      "--old-phala",
-      `${server.url}deleted-phala`,
       ...paths,
     ]);
-    const ethereum = await load(options);
-    const report = await claimers(options, ethereum);
+    const evidence = await load(options);
+    const report = await claimers(options, evidence);
     expect(record(report.claimeds).block).toBe(100);
     expect(record(report.claimedAndBridgeds).block).toBe(101);
-    expect(record(report.claimeds).source).toBe("export");
     expect(requests.every((request) => request.path === "/ethereum")).toBe(
       true,
     );
@@ -108,206 +396,124 @@ test("Ethereum loading and claimer exports use independent cutoffs", async () =>
         .filter((request) => request.query.includes("claimedAndBridgeds("))
         .map((request) => request.cutoff),
     ).toEqual(["101"]);
-    ethereum.meta.ethereum = { block: { number: 100 } };
-    await expect(claimers(options, ethereum)).rejects.toThrow(
+    evidence.meta.ethereum = { block: { number: 100 } };
+    await expect(claimers(options, evidence)).rejects.toThrow(
       "has not reached",
     );
-    for (const option of ["--chains", "--base", "--base-archive-rpc"])
-      expect(() => args([option, "base"])).toThrow("Unknown option");
+    await expect(
+      main([
+        "--stage",
+        "historical",
+        "--candidate",
+        `${server.url}ethereum`,
+        "--snapshot-cache",
+        `${directory}/missing.ndjson`,
+        "--output",
+        `${directory}/historical-failure.json`,
+      ]),
+    ).rejects.toThrow();
+    expect(
+      JSON.parse(await readFile(`${directory}/historical-failure.json`, "utf8"))
+        .status,
+    ).toBe("fail");
+    expect(requests.every((request) => request.path === "/ethereum")).toBe(
+      true,
+    );
   } finally {
     await server.stop(true);
   }
-}, 10000);
+}, 15000);
 
-test("prefetch resumes only missing dates through yesterday without subgraph or archive inputs", async () => {
-  const cachePath = `${directory}/snapshots.ndjson`;
-  const output = `${directory}/report.json`;
-  const dates = snapshotDates();
-  const missing = [text(dates[0]), text(dates.at(-1))];
-  await writeFile(
-    cachePath,
-    `${dates
-      .filter((date) => !missing.includes(date))
-      .map((date) => JSON.stringify({ date }))
-      .join("\n")}\n`,
-  );
-  const requested: string[] = [];
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request) {
-      const url = new URL(request.url);
-      if (url.pathname !== "/api/snapshot" || request.method !== "GET")
-        return new Response(null, { status: 400 });
-      const date = url.searchParams.get("date");
-      if (!date) return new Response(null, { status: 400 });
-      requested.push(date);
-      return Response.json({ date });
-    },
-  });
-  try {
-    const argv = [
-      "--prefetch-snapshots",
-      "--old-api",
-      String(server.url).replace(/\/$/, ""),
-      "--snapshot-cache",
-      cachePath,
-      "--output",
-      output,
-      "--ethereum",
-      `${server.url}unavailable`,
-    ];
-    await main(argv);
-    expect(requested).toEqual(missing);
-    expect((await readFile(cachePath, "utf8")).trim().split("\n")).toHaveLength(
-      dates.length,
-    );
-    const report = JSON.parse(await readFile(output, "utf8"));
-    expect(report.status).toBe("cached");
-    expect(report.gates).toEqual({});
-    expect(report.snapshots.fetched).toBe(2);
-    await main(argv);
-    expect(requested).toEqual(missing);
-    expect(JSON.parse(await readFile(output, "utf8")).snapshots.fetched).toBe(
-      0,
-    );
-    expect(() => args(["--prefetch-snapshots"])).toThrow("--snapshot-cache");
-  } finally {
-    await server.stop(true);
-  }
-});
-
-test("server gate uses cached snapshot shapes, Portal-inclusive totals and null Base", async () => {
-  const wad = 10n ** 18n;
-  const amount = (value: number) => String(BigInt(value) * wad);
-  const day = {
-    id: "2026-10-10",
-    date: "2026-10-10",
-    chain: "ethereum",
-    totalSupply: amount(1000),
-    reward: amount(875),
-    sunsetReward: "0",
-    phalaChainBridge: "0",
-    khalaLegacyChainBridge: "0",
-    khalaChainBridge: "0",
-    sygmaBridge: "0",
-    portalBridge: amount(25),
-    vaultReward: "0",
-    vaultUnstakeLocked: "0",
-    circulation: amount(125),
-    vaultImplementationReviewed: true,
+test("historical snapshots stop at the archived date and reject gaps without a live API fallback", async () => {
+  const day: Row = {
+    ...entityRows("ChainDay")[0],
+    id: "2020-04-30",
+    date: "2020-04-30",
   };
-  const ethereum = {
-    totalSupply: "1000",
-    reward: "875",
-    sunsetReward: "0",
-    phalaChainBridge: "0",
-    khalaChainBridge: "0",
-    sygmaBridge: "0",
-    portalBridge: "25",
-    vaultReward: "0",
-    vaultUnstakeLocked: "0",
-    circulation: "100",
+  for (const field of [
+    "totalSupply",
+    "reward",
+    "sunsetReward",
+    "phalaChainBridge",
+    "khalaLegacyChainBridge",
+    "khalaChainBridge",
+    "sygmaBridge",
+    "portalBridge",
+    "vaultBalance",
+    "vaultTotalAssets",
+    "vaultTreasuryAssets",
+    "vaultUnstakeLocked",
+    "vaultReward",
+    "circulation",
+  ])
+    day[field] = "0";
+  const old = {
+    date: "2020-04-30",
+    ethereum: { ...day, blockNumber: "12", timestamp: "2020-04-30T00:00:00Z" },
   };
-  const oldSnapshot = {
-    date: "2026-10-10T00:00:00.000000Z",
-    ethereum,
-    base: { totalSupply: "20", circulation: "20" },
-    totalCirculation: "120",
-  };
-  const cachePath = `${directory}/server-snapshots.ndjson`;
-  await writeFile(cachePath, `${JSON.stringify(oldSnapshot)}\n`);
-  let invalidBase = false;
+  const cache = `${directory}/old-snapshots.ndjson`;
+  await writeFile(cache, `${JSON.stringify(old)}\n`);
+  let apiRequests = 0;
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      const path = new URL(request.url).pathname;
-      if (path === "/ethereum") {
-        const query = text(record(await request.json()).query);
-        let data: Row;
-        if (query.includes("_meta"))
-          data = {
-            _meta: {
-              deployment: "new",
-              hasIndexingErrors: false,
-              block: { number: 102, timestamp: Math.floor(Date.now() / 1000) },
-            },
-          };
-        else if (query.includes("latest"))
-          data = {
-            latest: {
-              timestamp: String(Math.floor(Date.now() / 1000)),
-              vaultImplementationReviewed: true,
-            },
-          };
-        else if (query.includes("chainDays")) data = { chainDays: [day] };
-        else if (query.includes("vaultDays")) data = { vaultDays: [] };
-        else if (query.includes("vaultEvents")) data = { vaultEvents: [] };
-        else return new Response(null, { status: 400 });
-        return Response.json({ data });
+      if (new URL(request.url).pathname !== "/ethereum") {
+        apiRequests++;
+        return new Response(null, { status: 410 });
       }
-      if (path === "/old/api/all")
-        return Response.json({
-          ...oldSnapshot,
-          sources: {
-            ethereum: {
-              blockNumber: "102",
-              headBlockNumber: "102",
-              lagBlocks: "0",
-            },
-            base: { blockNumber: "102" },
+      const query = text(record(await request.json()).query);
+      let data: Row;
+      if (query.includes("_meta"))
+        data = {
+          _meta: {
+            deployment: "candidate",
+            hasIndexingErrors: false,
+            block: { number: 102, timestamp: 1791590400 },
           },
-        });
-      const actual = {
-        ...oldSnapshot,
-        ethereum: { ...ethereum, circulation: "125" },
-        base: invalidBase ? oldSnapshot.base : null,
-        totalCirculation: "125",
-      };
-      if (path === "/preview/api/all")
-        return Response.json({
-          ...actual,
-          sources: {
-            ethereum: {
-              blockNumber: "102",
-              indexedAt: "2026-10-10T00:00:00Z",
-              lagSeconds: "0",
-            },
-            base: null,
-          },
-        });
-      if (path === "/preview/api/circulation") return new Response("125");
-      if (path === "/preview/api/snapshot") return Response.json(actual);
-      return new Response(null, { status: 410 });
+        };
+      else if (query.includes("latest"))
+        data = { latest: { vaultImplementationReviewed: true } };
+      else if (query.includes("chainDays"))
+        data = {
+          chainDays: [day, { ...day, id: "2020-05-01", date: "2020-05-01" }],
+        };
+      else if (query.includes("vaultDays")) data = { vaultDays: [] };
+      else if (query.includes("vaultEvents")) data = { vaultEvents: [] };
+      else if (query.includes("transfers")) data = { transfers: [] };
+      else return new Response(null, { status: 400 });
+      return Response.json({ data });
     },
   });
-  const output = `${directory}/server-report.json`;
+  const output = `${directory}/historical-snapshots.json`;
   const argv = [
     "--stage",
-    "server",
-    "--ethereum",
+    "historical",
+    "--candidate",
     `${server.url}ethereum`,
-    "--old-api",
-    `${server.url}old`,
-    "--preview",
-    `${server.url}preview`,
     "--snapshot-cache",
-    cachePath,
+    cache,
     "--output",
     output,
   ];
   try {
     await main(argv);
-    const report = record(JSON.parse(await readFile(output, "utf8")));
-    expect(report.status).toBe("pass");
-    expect(record(record(report.gates)["7"]).snapshots).toBe(1);
-    invalidBase = true;
-    await expect(main(argv)).rejects.toThrow(
-      "Base compatibility field must be null",
+    expect(record(JSON.parse(await readFile(output, "utf8"))).status).toBe(
+      "pass",
     );
-    expect(JSON.parse(await readFile(output, "utf8")).status).toBe("fail");
+    expect(
+      record(
+        record(record(JSON.parse(await readFile(output, "utf8"))).gates)
+          .snapshots,
+      ).dates,
+    ).toBe(1);
+    await writeFile(
+      cache,
+      `${JSON.stringify(old)}\n${JSON.stringify({ ...old, date: "2020-05-02" })}\n`,
+    );
+    await expect(main(argv)).rejects.toThrow("Missing daily snapshots");
+    expect(apiRequests).toBe(0);
   } finally {
     await server.stop(true);
   }
-}, 15000);
+}, 10000);

@@ -3,14 +3,11 @@ import {
   ADDRESSES,
   claimerExport,
   compareArchive,
-  compareCheckpoints,
   compareClaimers,
   compareSnapshot,
   compareVault,
   compareVaultConsistency,
-  deterministicSample,
   type Row,
-  snapshotDates,
   transferDelta,
   wei,
 } from "./verify-lib";
@@ -272,30 +269,6 @@ test("archive totals replace Base with Portal and bound every date's residual", 
     ).residualPha,
   ).toBe(1);
 });
-test("prefetch ends at UTC yesterday", () => {
-  const dates = snapshotDates(Date.parse("2026-10-27T00:01:00Z"));
-  expect(dates[0]).toBe("2020-04-30");
-  expect(dates.at(-1)).toBe("2026-10-26");
-  expect(dates).not.toContain("2026-10-27");
-  expect(snapshotDates(Date.parse("2024-03-01T23:59:59Z"))).toContain(
-    "2024-02-29",
-  );
-});
-test("checkpoint gate uses immutable event IDs and exact cumulative locked assets", () => {
-  const checkpoints = [
-    { id: "0xabc", blockNumber: "12", vaultUnstakeLocked: "50" },
-  ];
-  compareCheckpoints(
-    [{ id: "0xabc", blockNumber: "12", unstakeLockedAfter: "50" }],
-    checkpoints,
-  );
-  expect(() =>
-    compareCheckpoints(
-      [{ id: "0xabc", blockNumber: "12", unstakeLockedAfter: "51" }],
-      checkpoints,
-    ),
-  ).toThrow();
-});
 test("Dune parity compares flowDate settlements and rewards, and rejects extra dates", () => {
   const expected = [{ day: "2026-10-10", totalAssets: 1, dailyRewards: 2 }];
   const actual = [
@@ -318,19 +291,6 @@ test("Dune parity compares flowDate settlements and rewards, and rejects extra d
     ),
   ).toThrow();
 });
-test("sampling is deterministic, includes endpoints and prioritizes transfer dates", () => {
-  const values = Array.from({ length: 100 }, (_, index) => String(index));
-  const sampled = deterministicSample(values, 30, new Set(["17", "23"]));
-  expect(sampled).toHaveLength(30);
-  expect(sampled).toContain("0");
-  expect(sampled).toContain("99");
-  expect(sampled).toContain("17");
-  expect(sampled).toContain("23");
-  expect(deterministicSample(values, 30, new Set(["17", "23"]))).toEqual(
-    sampled,
-  );
-});
-
 test("unavailable Dune rewards are reported, never interpreted as zero", () => {
   const actual = [
     {
