@@ -30,6 +30,8 @@ cd legacy/khala-circulation-api
 bunx cf deploy
 ```
 
+Strict-mode conflicts between local and remote Worker configuration abort the upload, even if the CLI prints "Deploy complete" afterward. Resolve the conflict in `cloudflare.config.ts` and retry; do not pass `--no-strict`. The config preserves the existing 50 ms CPU limit.
+
 Record the preceding Worker version before deploying. To roll back, promote that version from the same directory, then verify the legacy hostname:
 
 ```bash
