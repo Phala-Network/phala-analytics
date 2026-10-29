@@ -67,6 +67,66 @@ test("upgrade defaults and exemption validation reject obsolete references and s
   ).toThrow("at least one archive");
 });
 
+test("upgrade rejects each historical-only input flag", () => {
+  for (const option of [
+    "snapshot-cache",
+    "ndjson",
+    "results",
+    "old-khala-export",
+    "old-phala-export",
+  ]) {
+    expect(() =>
+      args([
+        "--candidate",
+        "https://candidate.test",
+        `--${option}`,
+        "archive.json",
+      ]),
+    ).toThrow(`--${option} applies only to historical comparisons`);
+  }
+  expect(() =>
+    args([
+      "--candidate",
+      "https://candidate.test",
+      "--stage",
+      "historical",
+      "--old-khala-export",
+      "archive.json",
+      "--allow-same-deployment",
+    ]),
+  ).toThrow("--allow-same-deployment applies only to upgrade comparisons");
+});
+
+test("CLI argument failures never direct the caller to a stale report", async () => {
+  const output = `${directory}/stale-report.json`;
+  const stale = JSON.stringify({ status: "pass", comparisonBlock: 1 });
+  await writeFile(output, stale);
+  for (const invalid of [["--unknown-option"], ["--safety-margin=invalid"]]) {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        `${import.meta.dir}/verify.ts`,
+        "--candidate",
+        "https://candidate.test",
+        "--output",
+        output,
+        ...invalid,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(exitCode).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toBe("Parity verification failed.\n");
+    expect(stderr).not.toContain(output);
+    expect(await readFile(output, "utf8")).toBe(stale);
+  }
+});
+
 test("verification queries cover every field of every entity declared in the schema", async () => {
   const schema = await readFile(`${import.meta.dir}/../schema.graphql`, "utf8");
   const entities = [...schema.matchAll(/type (\w+) @entity[^{]+\{([^}]+)\}/g)];
@@ -146,6 +206,7 @@ function graphFixture() {
     changedTag: false,
     repeatedId: false,
     diff: false,
+    sameDeployment: false,
   };
   const transfers = Array.from({ length: 1001 }, (_, index) => ({
     ...entityRows("Transfer")[0],
@@ -174,7 +235,7 @@ function graphFixture() {
           deployment:
             state.changedTag && variables.after !== undefined
               ? "changed"
-              : candidate
+              : candidate && !state.sameDeployment
                 ? "candidate"
                 : "production",
           hasIndexingErrors: state.indexingErrors,
@@ -220,6 +281,33 @@ function graphFixture() {
   ];
   return { server, state, requests, argv };
 }
+
+test("same deployment IDs require explicit smoke-test authorization", async () => {
+  const { server, state, requests, argv } = graphFixture();
+  state.sameDeployment = true;
+  try {
+    await expect(main(argv)).rejects.toThrow("same deployment");
+    expect(requests).toHaveLength(2);
+    const failure = record(
+      JSON.parse(await readFile(`${directory}/upgrade.json`, "utf8")),
+    );
+    expect(failure.status).toBe("fail");
+    expect(failure.allowSameDeployment).toBe(false);
+    expect(failure.deployments).toEqual({
+      production: "production",
+      candidate: "production",
+    });
+    await main([...argv, "--allow-same-deployment"]);
+    const smoke = record(
+      JSON.parse(await readFile(`${directory}/upgrade.json`, "utf8")),
+    );
+    expect(smoke.status).toBe("pass");
+    expect(smoke.allowSameDeployment).toBe(true);
+    expect(smoke.differences).toEqual([]);
+  } finally {
+    await server.stop(true);
+  }
+}, 15000);
 
 test("upgrade pins both deployments and every deterministic page, reports expected per-date diffs, and fails other changes", async () => {
   const { server, state, requests, argv } = graphFixture();

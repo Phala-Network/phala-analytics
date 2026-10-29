@@ -204,6 +204,7 @@ export interface UpgradeOptions {
   production: string;
   margin: number;
   expected: Set<string>;
+  allowSameDeployment: boolean;
 }
 export async function upgrade(
   options: UpgradeOptions,
@@ -211,6 +212,16 @@ export async function upgrade(
 ): Promise<void> {
   const previousMeta = await meta(options.production);
   const candidateMeta = await meta(options.candidate);
+  report.deployments = {
+    production: previousMeta.deployment,
+    candidate: candidateMeta.deployment,
+  };
+  report.allowSameDeployment = options.allowSameDeployment;
+  assert.ok(
+    options.allowSameDeployment ||
+      candidateMeta.deployment !== previousMeta.deployment,
+    "Candidate and production resolve to the same deployment; use --allow-same-deployment only for smoke tests",
+  );
   const block =
     Math.min(
       Number(record(previousMeta.block).number),
@@ -219,10 +230,6 @@ export async function upgrade(
   assert.ok(block > 0, "Comparison block must be positive");
   report.comparisonBlock = block;
   report.safetyMargin = options.margin;
-  report.deployments = {
-    production: previousMeta.deployment,
-    candidate: candidateMeta.deployment,
-  };
   report.heads = {
     production: record(previousMeta.block).number,
     candidate: record(candidateMeta.block).number,

@@ -44,6 +44,7 @@ export function args(argv = process.argv.slice(2)) {
       production: { type: "string", default: PRODUCTION_URL },
       "safety-margin": { type: "string", default: "64" },
       "expect-diff": { type: "string" },
+      "allow-same-deployment": { type: "boolean", default: false },
       "snapshot-cache": { type: "string" },
       ndjson: { type: "string" },
       results: { type: "string" },
@@ -76,11 +77,30 @@ export function args(argv = process.argv.slice(2)) {
       "--candidate / GOLDSKY_ETHEREUM_URL",
     ),
     margin,
+    allowSameDeployment: values["allow-same-deployment"],
     expected: expectedFields(values["expect-diff"]),
     ndjson: values.ndjson ?? process.env.SNAPSHOTS_NDJSON,
     results: values.results ?? process.env.DUNE_RESULTS_JSON,
   };
-  if (values.stage === "historical") {
+  if (values.stage === "upgrade") {
+    for (const option of [
+      "snapshot-cache",
+      "ndjson",
+      "results",
+      "old-khala-export",
+      "old-phala-export",
+    ] as const)
+      assert.equal(
+        values[option],
+        undefined,
+        `--${option} applies only to historical comparisons`,
+      );
+  } else {
+    assert.equal(
+      options.allowSameDeployment,
+      false,
+      "--allow-same-deployment applies only to upgrade comparisons",
+    );
     assert.equal(
       options.expected.size,
       0,
@@ -405,6 +425,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 if (import.meta.main)
   main().catch(() => {
     // I/O errors can contain private endpoint URLs; never print their details.
-    console.error("Parity verification failed; see the output report.");
+    console.error("Parity verification failed.");
     process.exitCode = 1;
   });

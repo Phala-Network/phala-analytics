@@ -228,7 +228,21 @@ The default reference is
 `https://api.goldsky.com/api/public/project_cmdgxxcewrqdi01wx9e7md0ek/subgraphs/phala-ethereum/prod/gn`.
 The runner exits nonzero on failure and writes a JSON report with deployment
 IDs, head blocks, the comparison block, entity counts and field differences.
-It never prints endpoint URLs or upstream error bodies.
+Argument errors exit before report creation; the CLI does not direct failures
+to a report that may be stale. It never prints endpoint URLs or upstream error
+bodies. Historical-only input flags are rejected in upgrade mode.
+
+Candidate and production must resolve to different deployment IDs. To smoke
+test the verifier against production itself, explicitly allow the shared
+deployment; this checks the runner rather than validating a replacement:
+
+```bash
+bun run verify --candidate "$PRODUCTION_URL" --allow-same-deployment \
+  --output smoke-results.json
+```
+
+`--allow-same-deployment` is for upgrade smoke tests only. The JSON report
+records whether it was enabled.
 
 The comparison block is `min(candidate head, production head) - 64`;
 `--safety-margin N` changes the margin in blocks. Every entity page uses
