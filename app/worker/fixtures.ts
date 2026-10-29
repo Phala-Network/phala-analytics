@@ -11,7 +11,7 @@ export const dailyCloud = (date: string) => ({
   active_users: 8,
 })
 const token = (amount: number) => String(BigInt(amount) * 10n ** 18n)
-export const implementation = {
+const implementation = {
   vaultImplementation: `0x${'1'.repeat(40)}`,
   vaultImplementationReviewed: true,
   accrualMode: 'formula',

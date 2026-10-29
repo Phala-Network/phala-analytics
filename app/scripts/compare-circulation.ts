@@ -254,7 +254,7 @@ const baseUrl = (value: string) => {
   return url
 }
 
-export const compareCirculation = async (
+const compareCirculation = async (
   oldBase: string,
   newBase: string,
   today = new Date().toISOString().slice(0, 10),

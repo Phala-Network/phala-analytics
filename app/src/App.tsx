@@ -78,7 +78,7 @@ const CARDS =
 // The same grid with two columns, for two cards per row.
 const CARDS_2 =
   'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 dark:*:data-[slot=card]:bg-card'
-// The same grid for chart cards, two per row.
+// Chart cards use two columns at the dashboard grid breakpoint.
 const CHARTS = 'grid grid-cols-1 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-2'
 
 const derive = (data: AnalyticsData) => {
@@ -197,8 +197,7 @@ export function App() {
   return (
     <>
       {/* SiteHeader from dashboard-01; the links follow its GitHub button.
-          Its row and main share one page width, as on the shadcn/ui site
-          (max-w-(--breakpoint-2xl)). */}
+          The shared max width follows the shadcn/ui site's --breakpoint-2xl page width. */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b">
         <div className="mx-auto flex w-full max-w-(--breakpoint-2xl) items-center gap-1 px-4 lg:gap-2 lg:px-6">
           <PhalaLogo className="h-6 w-auto" />
@@ -337,7 +336,7 @@ export function App() {
               />
               <ChartCard
                 title="Weekly rewards"
-                description="Complete weeks, Monday to Sunday UTC (PHA)"
+                description="Weekly totals, Monday to Sunday UTC (PHA)"
                 rows={view?.rows.weeklyRewards}
                 series={WEEKLY_REWARDS}
                 bars={{periodLabel: 'Week of'}}

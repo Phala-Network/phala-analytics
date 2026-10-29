@@ -6,7 +6,7 @@ no RPC is used.
 
 ## API contract
 
-Canonical base URL after cutover: `https://analytics.phala.network`.
+Canonical base URL: `https://analytics.phala.network`.
 The existing `https://pha-circulation-server.vercel.app` hostname remains a
 Vercel external-rewrite proxy to the same endpoints.
 All endpoints allow cross-origin requests (`Access-Control-Allow-Origin: *`).
@@ -115,8 +115,7 @@ expired entries are recomputed and no stale fallback is introduced.
 
 Deploy a new Worker version after moving a subgraph tag so cached historical
 rows from the previous version do not survive the 30-day data TTL. Existing
-browser responses can persist for one hour; snapshots cached by the old Vercel
-CDN before cutover can persist for a day.
+browser responses can persist for one hour.
 
 Reference: [Cloudflare Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/).
 
@@ -134,7 +133,7 @@ From the repository root:
 bun install --frozen-lockfile
 bun run verify:app
 cd app
-bun run cf dev --port 8787
+bun run dev --port 8787
 ```
 
 Local development uses local D1/R2 and the public Ethereum subgraph. Do not use
@@ -179,4 +178,5 @@ Ethereum-only formula change) and current production wire fixtures in
 bytes, number formatting, errors and recovery, CORS, cache expiry and release
 isolation; the workerd regression test also protects the dashboard routes.
 
-See [Operations](OPERATIONS.md) for the stack and staged cutover.
+See [Operations](OPERATIONS.md) for the stack, automatic deployments and
+compatibility proxy.

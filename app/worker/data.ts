@@ -41,7 +41,7 @@ export const finiteNumber = (value: unknown): number => {
 export const nullableNumber = (value: unknown) =>
   value == null ? null : finiteNumber(value)
 
-export const timestamp = (value: unknown): string => {
+const timestamp = (value: unknown): string => {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))
     throw new Error('Expected an ISO timestamp')
   return new Date(value).toISOString()

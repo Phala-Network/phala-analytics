@@ -35,8 +35,8 @@ formula before deploying the API.
 
 The circulation API and dashboard run in one Cloudflare Worker. Node.js 24.x
 is used only for local tooling and CI, with each package declaring its own
-version. The Vercel project becomes a configuration-only compatibility proxy
-after the staged cutover below.
+version. The Vercel project `pha-circulation-server` builds from this repository's
+`circulation-api/` directory and serves only compatibility rewrites.
 
 Code and component-specific commands:
 
@@ -121,7 +121,7 @@ deleting a version. These limits also apply during rollback.
 4. Move `phala-ethereum/prod` to the verified version. Both the API and apps
    use tag URLs; the Worker tracks `_meta.deployment` and reloads chain-derived
    cache rows after it changes.
-5. Deploy a fresh Worker version to change the circulation Cache API namespace.
+5. Run a fresh Workers Build to change the circulation Cache API namespace.
    Existing client responses can persist for 60 seconds (latest) or 3600 seconds
    (snapshots); there is no edge CDN cache.
    Verify plain-number output, `/api/all` totals and sampled daily values
@@ -130,58 +130,85 @@ deleting a version. These limits also apply during rollback.
 6. Delete the superseded version after consumer verification. Keep total
    deployed versions at or below three.
 
-Before deleting the old version, rollback can move `prod` back and promote a
-fresh Worker version. After deletion, recovery requires redeploying and
+Before deleting the old version, rollback can move `prod` back and run a
+fresh Workers Build. After deletion, recovery requires redeploying and
 resyncing that version; deleting an indexer is not an instant rollback.
 
-### Circulation API cutover
+### Dashboard and API deployment
 
-1. Merge the circulation port and deploy the Worker from `app/` with
-   `cf deploy --provision=false`. D1/R2, cron and the dashboard domain stay in
-   the same Worker. The public `GOLDSKY_ETHEREUM_URL` and new `VERSION` binding
-   are declared in its config. Do not switch the Vercel deployment yet.
-2. From `app/`, compare the original function with the canonical Worker:
+Production deploys automatically through [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
+when a matching change reaches `main` in `Phala-Network/phala-analytics`.
+The `main` ruleset requires a PR and the `check`, `app` and `subgraph` checks;
+force-pushes and branch deletion are blocked. CI runs the affected package
+checks, so only CI-passed merges reach the production build.
 
-   ```bash
-   bun scripts/compare-circulation.ts \
-     https://pha-circulation-server.vercel.app https://analytics.phala.network
-   ```
+Worker **phala-analytics** has these Builds settings:
 
-   Require zero failures; retain the JSON report. Verify `/`, `/api/data` and
-   `/api/health` on the Worker as well. The comparator includes all API routes,
-   30 snapshot dates, invalid dates, unknown routes, HEAD/POST and preflight.
-3. Switch the existing Vercel project to this repository with Root Directory
-   `circulation-api`, Framework Preset **Other**, and empty build/install/output
-   overrides. This directory contains only `vercel.json`; no function, package
-   manifest or Node runtime is needed. For a controlled CLI cutover, deploy
-   that directory to the existing project rather than reconnecting Git early.
-   Keep its previous production deployment ID/URL for rollback.
-4. Compare `https://analytics.phala.network` against
-   `https://pha-circulation-server.vercel.app` with the same script. Require
-   zero failures, including 400/404 bodies, CORS/preflight and cache headers.
-   This final check is necessary because local Worker tests do not execute
-   Vercel's external proxy. Confirm tracker clients still receive a plain
-   decimal with no trailing newline.
+| Setting           | Value                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| Production branch | `main`                                                                                                 |
+| Root directory    | `/app`                                                                                                 |
+| Build command     | `bun install --frozen-lockfile`                                                                        |
+| Deploy command    | `bunx cf deploy --provision=false`                                                                     |
+| Watch paths       | `app/*`, `package.json`, `bun.lock`, `biome.json`                                                      |
+| Build environment | `SKIP_DEPENDENCY_INSTALL=1`, `CLOUDFLARE_ACCOUNT_ID` for the production account, `CF_SEND_TELEMETRY=0` |
+| Preview builds    | Disabled                                                                                               |
+
+`cf deploy` builds the Vite dashboard and Worker together. D1, R2, cron and
+`analytics.phala.network` remain declared in `app/cloudflare.config.ts`;
+existing resources must be present because provisioning is disabled. Build
+variables are separate from runtime bindings and the `PHALA_CLOUD_API_KEY`
+secret. Subgraph deploys and tag changes remain manual and must pass the
+[subgraph upgrade gate](#subgraph-upgrade-and-tag).
+
+After a merge, confirm the Workers Build succeeded, then check `/`,
+`/api/health`, `/api/data`, circulation output and browser rendering.
+Changes outside the watch paths do not normally deploy the Worker; run a new
+build when a subgraph tag change needs a fresh circulation cache namespace.
+
+For recovery, disable automatic builds while investigating if later merges
+could overwrite the rollback. From `app/`, promote a known previous Worker
+version with the intended Cloudflare profile:
+
+```bash
+bunx cf workers deployments create --worker phala-analytics \
+  --strategy percentage \
+  --versions '[{"version_id":"<previous-version-id>","percentage":100}]'
+```
+
+Check that the previous version's bindings and upstream services still exist,
+then verify the same endpoints. Disabling builds alone leaves the current
+version serving traffic. Fix or revert the source through a PR before
+resuming automatic builds. Manual `bunx cf deploy --provision=false` from
+`app/` is an emergency fallback only.
+
+### Circulation proxy
+
+The Vercel project `pha-circulation-server` is connected to this repository
+with Root Directory `circulation-api`, Framework Preset **Other**, and empty
+build/install/output overrides. The directory contains only `vercel.json`;
+no function, package manifest, runtime secret or Node runtime is needed.
 
 The sole rewrite is `/api/:path*` →
 `https://analytics.phala.network/api/:path*`. Vercel's wildcard also matches
-`/api`, and it forwards query strings without changing the browser URL. The
-proxy returns upstream status/body and headers; Vercel adds its own platform
-headers and can consume CDN-specific cache directives. See
-[Vercel external rewrites](https://vercel.com/docs/rewrites#external-rewrites).
-New projects (created on or after April 6, 2026) honor upstream cache headers by
-default; older projects need the dashboard's external-rewrite caching setting
-or the `x-vercel-enable-rewrite-caching` opt-in to cache external rewrites.
-Keep the configuration minimal; the Worker's Cache API bounds upstream reads
-regardless of Vercel proxy caching. `no-store` errors must never be cached.
+`/api`, and it forwards query strings without changing the browser URL.
+Vercel adds platform headers and can consume CDN-specific cache directives;
+its own 404 responses for trailing-slash paths can differ from the Worker.
+See [Vercel external rewrites](https://vercel.com/docs/rewrites#external-rewrites).
 
-Vercel protection, redirects or platform behavior can affect external rewrites.
-Only the post-switch comparison verifies actual status/header forwarding for
-this project. Before the switch, the original Vercel function is the independent
-reference; afterward, comparing both hostnames verifies proxy fidelity. Roll
-back by promoting the saved Vercel deployment first, then restore the previous
-Worker version if needed. The old function remains available in that Vercel
-deployment and in Git history; it need not remain in the active source tree.
+From `app/`, verify proxy fidelity after changes:
+
+```bash
+bun scripts/compare-circulation.ts \
+  https://analytics.phala.network https://pha-circulation-server.vercel.app
+```
+
+The comparator covers all routes, 30 snapshot dates, invalid dates, unknown
+routes, HEAD/POST and preflight. Review any proxy-specific differences and
+confirm tracker clients receive a plain decimal with no trailing newline.
+`no-store` errors must never be cached. Roll back a proxy configuration change
+by promoting its previous Vercel deployment; Worker rollback is separate.
+Retired functions remain in Git history, not the active source tree.
 
 ### API returns 503
 

@@ -4,7 +4,7 @@ import type {Config} from './config.js'
 import {readSubgraph} from './subgraph.js'
 
 // First supported snapshot date: the Ethereum token deployment day.
-export const FIRST_ETHEREUM_SNAPSHOT_DATE = '2020-04-30'
+const FIRST_ETHEREUM_SNAPSHOT_DATE = '2020-04-30'
 
 // The requested date cannot be served: malformed (400) or outside the
 // available range (404).
