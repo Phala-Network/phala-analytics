@@ -4,7 +4,8 @@ This directory ports the [`subgraph/`](../subgraph/README.md) indexer to
 [Envio HyperIndex](https://docs.envio.dev). It produces the same 11 entities,
 with the same names, fields and IDs, from the same contracts and start blocks.
 Event logs come from HyperSync. The Vault getter reads and the Clock's block
-timestamps come from an Ethereum archive RPC.
+timestamps come from an Ethereum archive RPC. The project targets
+`envio` 3.15.0.
 
 The subgraph is untouched. The port sits beside it so both can run while the
 results are compared. It has its own pnpm lockfile, because the Envio CLI
@@ -106,30 +107,42 @@ The stored data is identical. The API around it is not.
 
 ## Benchmark
 
-Three cold full syncs of the final code on one laptop (Apple Silicon, Postgres
-17 in Docker), from block 9,975,568 to chain head (about 26,299,100), each with
-an empty database and no effect cache. Time runs from "Starting indexing" to
-"Ready" in the indexer log. Other indexers were syncing on the same machine.
+Cold full syncs on one laptop (Apple Silicon, Postgres 17 in Docker), from
+block 9,975,568 to chain head, each with an empty database and no effect
+cache. Time runs from "Starting indexing" to "Ready" in the indexer log.
 
-| Run (2026-10-29) | Time    | Events processed¹ | Blocks/s | Waiting on RPC² | Waiting on HyperSync³ |
-| ---------------- | ------- | ----------------- | -------- | --------------- | --------------------- |
-| 1                | 238.2 s | 25,574            | 68,500   | 88 s            | 148 s                 |
-| 2                | 212.1 s | 25,574            | 77,000   | 115 s           | 94 s                  |
-| 3                | 348.6 s | 25,576            | 46,800   | 207 s           | 139 s                 |
+**envio 3.15.0** (2026-10-29, no other sync running from this project):
+
+| Time    | Final block | Events processed¹ | Blocks/s | Waiting on RPC² | Waiting on HyperSync³ |
+| ------- | ----------- | ----------------- | -------- | --------------- | --------------------- |
+| 250.0 s | 26,299,407  | 25,588            | 65,300   | 164 s           | 83 s                  |
+
+Earlier runs on **envio 3.14.0**, same code otherwise, with other indexers
+syncing on the same machine:
+
+| Run | Time    | Events processed¹ | Blocks/s | Waiting on RPC² | Waiting on HyperSync³ |
+| --- | ------- | ----------------- | -------- | --------------- | --------------------- |
+| A   | 238.2 s | 25,574            | 68,500   | 88 s            | 148 s                 |
+| B   | 212.1 s | 25,574            | 77,000   | 115 s           | 94 s                  |
+| C   | 348.6 s | 25,576            | 46,800   | 207 s           | 139 s                 |
 
 ¹ 24,931 contract events plus one Clock call per 25 blocks.
 ² `envio_preload_seconds`: handlers waiting on the Vault and timestamp reads.
 ³ `envio_processing_stalled_on_fetch_seconds`.
 
-The spread between runs comes from the public RPC. Run 3 spent 166 s inside
-Vault reads against 45-69 s in the others, with no failed requests. A
-dedicated archive RPC would shorten the RPC share.
+Most of the time is spent waiting on the public RPC, and that wait varies from
+run to run: Vault reads took 119 s in the 3.15.0 run and 45-166 s in the
+3.14.0 runs. The 3.15.0 run retried one failed RPC request; the 3.14.0 runs
+retried none. Database writes took 0.5 s on 3.15.0 against about 16 s on
+3.14.0, but with the RPC dominating, total time is about the same. A dedicated
+archive RPC would shorten the RPC share.
 
 ## Parity
 
 After each run the indexer was stopped and every entity was compared field by
 field with the live `phala-ethereum/prod` deployment, queried with
-`block: {number: N}` at the indexer's final block N. Run 3, block 26,299,121:
+`block: {number: N}` at the indexer's final block N. envio 3.15.0 run, block
+26,299,410:
 
 | Entity            | Rows   | Matching |
 | ----------------- | ------ | -------- |
@@ -146,7 +159,8 @@ field with the live `phala-ethereum/prod` deployment, queried with
 | ClaimDay          | 654    | 654      |
 
 Every ID set was equal, and every field matched exactly: integers as
-integers, decimals as exact decimals, about 417,000 values in all. Runs 1 and
-2 matched in the same way at blocks 26,299,053 and 26,299,075. As a control,
+integers, decimals as exact decimals, about 417,000 values in all. The three
+3.14.0 runs matched in the same way at blocks 26,299,053, 26,299,075 and
+26,299,121. As a control,
 the same comparison against the subgraph 1,000 blocks earlier found
 differences in the mutable entities, as it should.
