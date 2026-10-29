@@ -1,8 +1,13 @@
 import {expect, test} from 'bun:test'
-import {shiftDate} from './data'
-import {chainDay, claimDay, dailyCloud, vaultDay} from './fixtures'
 import {compare} from './scripts/compare'
-import {CHAIN_FIELDS, CLAIM_FIELDS, parseDay, VAULT_FIELDS} from './subgraph'
+import {shiftDate} from './worker/data'
+import {chainDay, claimDay, dailyCloud, vaultDay} from './worker/fixtures'
+import {
+  CHAIN_FIELDS,
+  CLAIM_FIELDS,
+  parseDay,
+  VAULT_FIELDS,
+} from './worker/subgraph'
 
 const cloud = Array.from({length: 663}, (_, index) => ({
   ...dailyCloud(shiftDate('2024-11-29', index)),

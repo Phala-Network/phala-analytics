@@ -36,7 +36,7 @@ test('analytics runs in real workerd with migrated local D1 and isolated upstrea
   try {
     const runnerPath = join(directory, 'runner.mjs')
     await Bun.write(runnerPath, await runnerOutput.text())
-    const schemaPath = join(import.meta.dir, 'migrations/0001_init.sql')
+    const schemaPath = join(import.meta.dir, '../migrations/0001_init.sql')
     const child = Bun.spawn(['node', runnerPath, schemaPath], {
       cwd: import.meta.dir,
       stdin: new Blob([await workerOutput.text()]),

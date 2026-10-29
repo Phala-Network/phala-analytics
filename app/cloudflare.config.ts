@@ -3,7 +3,9 @@ import {bindings, defineConfig, triggers} from 'cf/config'
 export default defineConfig(({mode}) => ({
   worker: {
     name: 'phala-analytics',
-    entrypoint: './index.ts',
+    entrypoint: './worker/index.ts',
+    // Vite builds the dashboard into static assets; API paths always reach the Worker.
+    assets: {runWorkerFirst: ['/api', '/api/*']},
     compatibilityDate: '2026-10-23',
     workersDev: false,
     domains: ['analytics.phala.network'],

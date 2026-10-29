@@ -1,0 +1,150 @@
+import {ChevronDownIcon} from 'lucide-react'
+import {lazy, type ReactNode, Suspense} from 'react'
+import {Button} from '@/components/ui/button'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {Skeleton} from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {formatDay, formatNumber} from '@/lib/format'
+import {cellValue, type Row, type Series} from '@/lib/series'
+
+const ChartArea = lazy(() => import('./chart-area'))
+
+/**
+ * Chart card from the dashboard-01 block (chart-area-interactive) with a
+ * collapsible data table listing every series, newest first.
+ */
+export function ChartAreaCard({
+  title,
+  description,
+  rows,
+  series,
+  shaded = [],
+  shadedLabel,
+  headline,
+  action,
+  footer,
+}: {
+  title: string
+  description: string
+  /** Undefined while loading. */
+  rows: Row[] | undefined
+  /** Series with a color are drawn; the others appear in the table only. */
+  series: Series[]
+  shaded?: [string, string][]
+  /** Table marker for rows inside `shaded`. */
+  shadedLabel?: string
+  headline?: ReactNode
+  action?: ReactNode
+  footer?: ReactNode
+}) {
+  const drawn = series.flatMap((item) =>
+    item.color ? [{...item, color: item.color}] : [],
+  )
+  const isShaded = (date: string) =>
+    shaded.some(([first, last]) => first <= date && date <= last)
+
+  return (
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle>
+          <h3>{title}</h3>
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+        {action && <CardAction>{action}</CardAction>}
+        {headline}
+      </CardHeader>
+      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+        <Suspense fallback={<Skeleton className="h-[250px] w-full" />}>
+          {rows ? (
+            <ChartArea
+              title={title}
+              rows={rows}
+              series={drawn}
+              shaded={shaded}
+            />
+          ) : (
+            <Skeleton className="h-[250px] w-full" />
+          )}
+        </Suspense>
+      </CardContent>
+      <CardFooter className="flex-col items-start gap-2 text-sm">
+        {footer && (
+          <div className="leading-none text-muted-foreground">{footer}</div>
+        )}
+        <Collapsible className="w-full">
+          <CollapsibleTrigger asChild disabled={!rows}>
+            <Button variant="ghost" size="sm" className="group -ml-2">
+              <ChevronDownIcon className="transition-transform group-data-[state=open]:rotate-180" />
+              Data table
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            {rows && (
+              <section
+                className="max-h-80 overflow-auto"
+                aria-label={`${title} data`}
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard reachable
+                tabIndex={0}
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead scope="col">Date (UTC)</TableHead>
+                      {series.map(({key, label}) => (
+                        <TableHead key={key} scope="col" className="text-right">
+                          {label}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.toReversed().map((row) => (
+                      <TableRow key={row.date}>
+                        <TableHead scope="row" className="font-normal">
+                          {formatDay(row.date)}
+                          {shadedLabel && isShaded(row.date) && (
+                            <span className="text-muted-foreground">
+                              {` (${shadedLabel})`}
+                            </span>
+                          )}
+                        </TableHead>
+                        {series.map(({key}) => (
+                          <TableCell
+                            key={key}
+                            className="text-right tabular-nums"
+                          >
+                            {formatNumber(cellValue(row, key))}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </section>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+      </CardFooter>
+    </Card>
+  )
+}
