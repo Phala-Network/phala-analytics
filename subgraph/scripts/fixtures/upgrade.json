@@ -1,0 +1,229 @@
+{
+  "ChainState": [
+    {
+      "id": "current",
+      "chain": "ethereum",
+      "nextDay": "9007199254740993001",
+      "observedBlockNumber": "9007199254740993001",
+      "observedBlockTimestamp": "9007199254740993001",
+      "claimsStarted": true,
+      "totalSupply": "9007199254740993001",
+      "reward": "9007199254740993001",
+      "sunsetReward": "9007199254740993001",
+      "phalaChainBridge": "9007199254740993001",
+      "khalaLegacyChainBridge": "9007199254740993001",
+      "khalaChainBridge": "9007199254740993001",
+      "sygmaBridge": "9007199254740993001",
+      "portalBridge": "9007199254740993001",
+      "vaultBalance": "9007199254740993001",
+      "khalaClaimCount": "9007199254740993001",
+      "khalaFree": "9007199254740993001",
+      "khalaStaked": "9007199254740993001",
+      "phalaClaimCount": "9007199254740993001",
+      "phalaFree": "9007199254740993001",
+      "phalaStaked": "9007199254740993001"
+    }
+  ],
+  "ChainDay": [
+    {
+      "id": "2026-10-10",
+      "chain": "ethereum",
+      "date": "2026-10-10",
+      "timestamp": "1791590400",
+      "observedBlockNumber": "9007199254740993001",
+      "observedBlockTimestamp": "9007199254740993001",
+      "totalSupply": "9007199254740993001",
+      "reward": "9007199254740993001",
+      "sunsetReward": "9007199254740993001",
+      "phalaChainBridge": "9007199254740993001",
+      "khalaLegacyChainBridge": "9007199254740993001",
+      "khalaChainBridge": "9007199254740993001",
+      "sygmaBridge": "9007199254740993001",
+      "portalBridge": "9007199254740993001",
+      "vaultBalance": "9007199254740993001",
+      "vaultTotalAssets": "9007199254740993001",
+      "vaultTreasuryAssets": "9007199254740993001",
+      "vaultUnstakeLocked": "9007199254740993001",
+      "vaultReward": "9007199254740993001",
+      "circulation": "9007199254740993001",
+      "vaultImplementation": "0x0101010101010101010101010101010101010101",
+      "vaultImplementationReviewed": true,
+      "accrualMode": "formula"
+    }
+  ],
+  "Latest": [
+    {
+      "id": "current",
+      "chain": "ethereum",
+      "timestamp": "1791590400",
+      "observedBlockNumber": "9007199254740993001",
+      "observedBlockTimestamp": "9007199254740993001",
+      "totalSupply": "9007199254740993001",
+      "reward": "9007199254740993001",
+      "sunsetReward": "9007199254740993001",
+      "phalaChainBridge": "9007199254740993001",
+      "khalaLegacyChainBridge": "9007199254740993001",
+      "khalaChainBridge": "9007199254740993001",
+      "sygmaBridge": "9007199254740993001",
+      "portalBridge": "9007199254740993001",
+      "vaultBalance": "9007199254740993001",
+      "vaultTotalAssets": "9007199254740993001",
+      "vaultTreasuryAssets": "9007199254740993001",
+      "vaultUnstakeLocked": "9007199254740993001",
+      "vaultReward": "9007199254740993001",
+      "circulation": "9007199254740993001",
+      "shareSupply": "9007199254740993001",
+      "sharePrice": "1.0000000000000000000000000000000001",
+      "apr": "1.0000000000000000000000000000000001",
+      "stakers": "9007199254740993001",
+      "vaultImplementation": "0x0101010101010101010101010101010101010101",
+      "vaultImplementationReviewed": true,
+      "accrualMode": "formula"
+    }
+  ],
+  "Transfer": [
+    {
+      "id": "0x0001",
+      "from": "0x0101010101010101010101010101010101010101",
+      "to": "0x0101010101010101010101010101010101010101",
+      "amount": "9007199254740993001",
+      "blockNumber": "9007199254740993001",
+      "timestamp": "1791590400",
+      "transactionHash": "0x0101010101010101010101010101010101010101",
+      "logIndex": "9007199254740993001"
+    }
+  ],
+  "VaultState": [
+    {
+      "id": "current",
+      "implementation": "0x0101010101010101010101010101010101010101",
+      "checkpointTime": "9007199254740993001",
+      "checkpointTotalAssets": "9007199254740993001",
+      "checkpointTreasuryAssets": "9007199254740993001",
+      "rewardRate": "9007199254740993001",
+      "treasuryRatio": "9007199254740993001",
+      "paused": false,
+      "shareSupply": "9007199254740993001",
+      "stakers": "9007199254740993001",
+      "unstakeLocked": "9007199254740993001",
+      "dailyRewards": "9007199254740993001",
+      "dailyTreasuryRewards": "9007199254740993001",
+      "deposits": "9007199254740993001",
+      "withdrawRequests": "9007199254740993001",
+      "claims": "9007199254740993001",
+      "treasuryClaims": "9007199254740993001",
+      "depositCount": "9007199254740993001",
+      "withdrawRequestCount": "9007199254740993001",
+      "claimCount": "9007199254740993001",
+      "treasurySettlementCount": "9007199254740993001",
+      "settlementTotalAssets": null,
+      "vaultImplementationReviewed": true,
+      "accrualMode": "formula"
+    }
+  ],
+  "VaultDay": [
+    {
+      "id": "2026-10-10",
+      "date": "2026-10-10",
+      "flowDate": "2026-10-10",
+      "timestamp": "1791590400",
+      "observedBlockNumber": "9007199254740993001",
+      "observedBlockTimestamp": "9007199254740993001",
+      "totalAssets": "9007199254740993001",
+      "treasuryAssets": "9007199254740993001",
+      "shareSupply": "9007199254740993001",
+      "sharePrice": "1.0000000000000000000000000000000001",
+      "apr": "1.0000000000000000000000000000000001",
+      "stakers": "9007199254740993001",
+      "unstakeLocked": "9007199254740993001",
+      "rewardRate": "9007199254740993001",
+      "treasuryRatio": "9007199254740993001",
+      "paused": false,
+      "dailyRewards": "9007199254740993001",
+      "dailyTreasuryRewards": "9007199254740993001",
+      "deposits": "9007199254740993001",
+      "withdrawRequests": "9007199254740993001",
+      "claims": "9007199254740993001",
+      "treasuryClaims": "9007199254740993001",
+      "depositCount": "9007199254740993001",
+      "withdrawRequestCount": "9007199254740993001",
+      "claimCount": "9007199254740993001",
+      "treasurySettlementCount": "9007199254740993001",
+      "settlementTotalAssets": null,
+      "vaultImplementation": "0x0101010101010101010101010101010101010101",
+      "vaultImplementationReviewed": true,
+      "accrualMode": "formula"
+    }
+  ],
+  "VaultEvent": [
+    {
+      "settlementAssets": null,
+      "id": "0x0001",
+      "kind": "value",
+      "assets": "9007199254740993001",
+      "shares": "9007199254740993001",
+      "blockNumber": "9007199254740993001",
+      "timestamp": "1791590400",
+      "transactionHash": "0x0101010101010101010101010101010101010101",
+      "logIndex": "9007199254740993001",
+      "unstakeLockedAfter": "9007199254740993001",
+      "checkpointTime": "9007199254740993001",
+      "checkpointTotalAssets": "9007199254740993001",
+      "checkpointTreasuryAssets": "9007199254740993001",
+      "rewardRate": "9007199254740993001",
+      "treasuryRatio": "9007199254740993001",
+      "shareSupply": "9007199254740993001",
+      "paused": false,
+      "implementation": "0x0101010101010101010101010101010101010101",
+      "vaultImplementationReviewed": true,
+      "accrualMode": "formula"
+    }
+  ],
+  "Holder": [
+    {
+      "id": "0x0001",
+      "shares": "9007199254740993001"
+    }
+  ],
+  "Claimed": [
+    {
+      "id": "2026-10-10",
+      "block_number": "9007199254740993001",
+      "timestamp_": "1791590400",
+      "transactionHash_": "value",
+      "contractId_": "value",
+      "user": null,
+      "free": null,
+      "staked": null,
+      "receiver": null
+    }
+  ],
+  "ClaimedAndBridged": [
+    {
+      "id": "2026-10-10",
+      "block_number": "9007199254740993001",
+      "timestamp_": "1791590400",
+      "transactionHash_": "value",
+      "contractId_": "value",
+      "user": null,
+      "free": null,
+      "staked": null,
+      "l1Receiver": null,
+      "l2Receiver": null
+    }
+  ],
+  "ClaimDay": [
+    {
+      "id": "2026-10-10",
+      "date": "2026-10-10",
+      "flowDate": "2026-10-10",
+      "timestamp": "1791590400",
+      "khalaClaimCount": "9007199254740993001",
+      "khalaFree": "9007199254740993001",
+      "khalaStaked": "9007199254740993001",
+      "phalaClaimCount": "9007199254740993001",
+      "phalaFree": "9007199254740993001",
+      "phalaStaked": "9007199254740993001"
+    }
+  ]
+}

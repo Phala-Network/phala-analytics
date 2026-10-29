@@ -69,17 +69,6 @@ export const dated = (values: Row[], field = "date"): Map<string, Row> => {
   }
   return map;
 };
-export function snapshotDates(now = Date.now()): string[] {
-  const dates: string[] = [];
-  const today = new Date(now).toISOString().slice(0, 10);
-  for (
-    let timestamp = Date.parse(START_DATE);
-    timestamp < Date.parse(today);
-    timestamp += 86400000
-  )
-    dates.push(new Date(timestamp).toISOString().slice(0, 10));
-  return dates;
-}
 export function claimerExport(value: unknown, chain: "khala" | "phala") {
   const data = record(value);
   assert.ok(
@@ -356,24 +345,6 @@ export function compareClaimers(actual: Row[], expected: Row[]): void {
   for (const row of expected)
     assert.deepEqual(byId.get(text(row.id)), row, `Claimer differs ${row.id}`);
 }
-export function compareCheckpoints(events: Row[], checkpoints: Row[]): void {
-  const byId = new Map(events.map((event) => [text(event.id), event]));
-  for (const checkpoint of checkpoints) {
-    const event = byId.get(text(checkpoint.id));
-    assert.ok(event, `Missing vault event ${checkpoint.id}`);
-    assert.equal(
-      event.blockNumber,
-      checkpoint.blockNumber,
-      "Checkpoint block differs",
-    );
-    assert.equal(
-      event.unstakeLockedAfter,
-      checkpoint.vaultUnstakeLocked,
-      `Locked assets differ ${checkpoint.id}`,
-    );
-  }
-  assert.ok(checkpoints.length > 0, "No old checkpoints checked");
-}
 export function compareVault(vault: Row[], expected: Row[], full = true): Row {
   if (full)
     assert.equal(expected.length, 550, "Expected 550 dated Vault export rows");
@@ -503,38 +474,4 @@ export function compareVaultConsistency(vault: Row[], events: Row[]): Row[] {
     previousIndex = end;
   }
   return residuals;
-}
-export function deterministicSample<T>(
-  values: T[],
-  count: number,
-  preferred: Set<T> = new Set(),
-): T[] {
-  assert.ok(Number.isInteger(count) && count >= 2, "Sample size must be >= 2");
-  if (values.length <= count) return values;
-  const first = values[0];
-  const last = values.at(-1);
-  assert.ok(first !== undefined && last !== undefined);
-  const result = new Set<T>([first, last]);
-  for (const value of values)
-    if (preferred.has(value) && result.size < count) result.add(value);
-  for (let i = 0; result.size < count && i < count; i++) {
-    const value = values[Math.floor((i * (values.length - 1)) / (count - 1))];
-    assert.ok(value !== undefined);
-    result.add(value);
-  }
-  for (const value of values) {
-    if (result.size === count) break;
-    result.add(value);
-  }
-  return values.filter((value) => result.has(value));
-}
-export function shape(value: unknown): unknown {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return value.map(shape);
-  if (typeof value !== "object") return typeof value;
-  return Object.fromEntries(
-    Object.entries(record(value))
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, child]) => [key, shape(child)]),
-  );
 }
