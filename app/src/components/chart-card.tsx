@@ -103,14 +103,17 @@ export function ChartCard({
           )}
         </Suspense>
       </CardContent>
-      <CardFooter className="flex-col items-start gap-2 text-sm">
-        {footer && (
-          <div className="leading-none text-muted-foreground">{footer}</div>
-        )}
+      {/* The footer fills cards stretched by their row, and its first line is
+      the table trigger, so triggers line up across a row. The ghost trigger's
+      icon lines up with the card text. */}
+      <CardFooter className="flex-1 flex-col items-start gap-2 text-sm">
         <Collapsible className="w-full">
           <CollapsibleTrigger asChild disabled={!tableRows}>
-            <Button variant="ghost" size="sm" className="group -ml-2">
-              <ChevronDownIcon className="transition-transform group-data-[state=open]:rotate-180" />
+            <Button variant="ghost" size="sm" className="group -ml-1.5">
+              <ChevronDownIcon
+                data-icon="inline-start"
+                className="transition-transform group-data-[state=open]:rotate-180"
+              />
               Data table
             </Button>
           </CollapsibleTrigger>
@@ -160,6 +163,7 @@ export function ChartCard({
             )}
           </CollapsibleContent>
         </Collapsible>
+        {footer && <div className="text-muted-foreground">{footer}</div>}
       </CardFooter>
     </Card>
   )
