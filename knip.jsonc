@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip/schema.json",
+  "workspaces": {
+    "app": {
+      "entry": [
+        "src/lib/utils.ts",
+        "worker/index.ts",
+        "worker/runtime-check.ts",
+        "cloudflare.config.ts",
+        "scripts/*.ts",
+        "**/*.test.ts"
+      ],
+      "project": ["**/*.{ts,tsx,css}"],
+      // Miniflare's declarations import this required peer's experimental types.
+      "ignoreDependencies": ["@cloudflare/workers-types"]
+    },
+    "subgraph": {
+      "entry": [
+        "src/{token,vault,claimer,clock}.ts",
+        "{scripts,tests}/**/*.test.ts"
+      ],
+      "project": ["{src,scripts,tests}/**/*.ts"],
+      // Matchstick invokes node_modules/assemblyscript/bin/asc directly.
+      "ignoreDependencies": ["assemblyscript"]
+    }
+  }
+}

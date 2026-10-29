@@ -34,8 +34,8 @@ const ChartBar = lazy(() => import('./chart-bar'))
 /**
  * Chart card from the dashboard-01 block (chart-area-interactive) with a
  * collapsible data table, newest first. The table lists the chart's rows and
- * series unless `table` gives others. The footer follows the block's
- * section-cards footer.
+ * series unless `table` gives others.
+ * CardFooter follows the block's section-cards layout.
  */
 export function ChartCard({
   title,

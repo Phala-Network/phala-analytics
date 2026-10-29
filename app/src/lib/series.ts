@@ -29,7 +29,7 @@ export const toRows = <T extends {date: string}>(
 /**
  * Vault rewards summed per ISO week (UTC, Monday to Sunday) of their flow day,
  * keyed by the Monday. Quiet days add 0. The latest week is left out until its
- * Sunday has a row, so every bar is a complete week.
+ * Sunday has a row; the first week may have fewer than seven days.
  */
 export const weeklyRewards = (vault: AnalyticsData['vault']): Row[] => {
   const weeks = new Map<number, number>()

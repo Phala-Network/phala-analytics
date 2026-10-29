@@ -1,6 +1,6 @@
 specVersion: 1.2.0
 description: Phala ethereum circulation, midnight history and analytics
-repository: https://github.com/Phala-Network/phala-subgraphs
+repository: https://github.com/Phala-Network/phala-analytics
 schema:
   file: ./schema.graphql
 indexerHints:

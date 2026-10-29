@@ -1,4 +1,4 @@
-# Phala subgraphs
+# Ethereum subgraph
 
 The `phala-ethereum` Goldsky subgraph indexes Ethereum PHA circulation,
 Vault metrics and flows, and Khala/Phala sunset claims. `ethereum.yaml` starts
@@ -7,9 +7,7 @@ the Clock polls every 25 blocks after its configured start block.
 
 Consumers use the `prod` tag:
 `https://api.goldsky.com/api/public/project_cmdgxxcewrqdi01wx9e7md0ek/subgraphs/phala-ethereum/prod/gn`.
-See the circulation server's
-[operations guide](../docs/OPERATIONS.md)
-for the wider stack.
+See the [operations guide](../docs/OPERATIONS.md) for the wider stack.
 
 ## Data reference
 
@@ -47,8 +45,8 @@ calls `closeDaysUpTo` before applying its event; Clock polls close quiet days.
 `observedBlockNumber` / `observedBlockTimestamp` identify the last event or poll
 before closure, not the final canonical block before midnight. They are zero
 before deployment. Snapshot consumers retain this observed-block meaning and
-the requested midnight `date`. The legacy `/api/snapshot` instead reads the
-first block at or after midnight, explaining small parity differences.
+the requested midnight `date`. The retired RPC snapshot API read the
+first block at or after midnight, explaining small archive parity differences.
 
 | VaultDay field                                                 | Meaning                                                                    | Dune equivalent |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------- | --------------- |
@@ -139,7 +137,7 @@ getters. Before Vault deployment, the implementation is zero,
 reviewed is true, and mode is `inactive`.
 
 Consumers should treat an unreviewed implementation as unhealthy;
-pha-circulation-server returns 503 for circulation. The parity runner rejects
+the Worker's circulation API returns 503. The parity runner rejects
 promotion while the flag is false.
 
 For an upgrade, review the verified ABI and formula, update the ABI and
@@ -207,8 +205,9 @@ slots before an upgrade and storage after sync. Pausing does not free a slot.
 Before deleting the previous version, rollback moves `prod` back; restore the
 matching consumer version if its circulation definition changed. After
 deletion, rollback requires a free slot, redeployment and a full sync.
-CI does not deploy or move tags. Repository metadata changes do not require
-a subgraph redeploy.
+CI does not deploy or move tags; subgraph releases remain manual behind the
+upgrade gate. The `repository` URL in `ethereum.yaml` takes effect on the next
+subgraph version; this metadata change needs no redeploy now.
 
 ## Parity verification
 
@@ -342,4 +341,4 @@ only audited first-block flows and `rewardRate * delay + 1e-6 PHA` accrual.
 All expected/actual definition changes and bounds remain in the report.
 The deleted Vault-state checkpoint reference, live old claimers, API-prefetch,
 server/cache migration stages and raw-RPC checks have been removed. API and
-Worker cache verification use the consumer packages' own checks.
+Worker cache verification use the app package's checks.

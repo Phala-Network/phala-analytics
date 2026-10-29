@@ -28,7 +28,7 @@ import {
 type Request = (url: string, init?: RequestInit) => Promise<Response>
 type SqlValue = string | number | null
 
-export const stateStatement = (
+const stateStatement = (
   db: D1Database,
   key: string,
   value: string,

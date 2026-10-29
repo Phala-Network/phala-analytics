@@ -138,7 +138,7 @@ export const compare = (
   ]
 }
 
-export const subgraphSnapshot = async (url: string) => {
+const subgraphSnapshot = async (url: string) => {
   const meta = await graphql(url, META_QUERY, {})
   assert.equal(record(meta.latest).chain, 'ethereum', 'Subgraph chain mismatch')
   const deployment = subgraphMeta(meta)

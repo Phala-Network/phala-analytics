@@ -4,7 +4,7 @@ export type Row = Record<string, unknown>;
 export const START_DATE = "2020-04-30";
 export const CLAIM_FIELDS =
   "id block_number timestamp_ transactionHash_ contractId_ user free staked";
-export const WAD = 10n ** 18n;
+const WAD = 10n ** 18n;
 export const record = (value: unknown): Row => {
   assert.ok(
     value !== null && typeof value === "object" && !Array.isArray(value),
@@ -20,12 +20,12 @@ export const text = (value: unknown): string => {
   assert.equal(typeof value, "string", "Expected string");
   return value as string;
 };
-export const integer = (value: unknown): bigint => {
+const integer = (value: unknown): bigint => {
   const string = text(value);
   assert.match(string, /^-?\d+$/);
   return BigInt(string);
 };
-export const finite = (value: unknown): number => {
+const finite = (value: unknown): number => {
   assert.ok(
     typeof value === "number" || typeof value === "string",
     "Expected number",
@@ -41,9 +41,9 @@ export const wei = (value: unknown): bigint => {
   const result = BigInt(whole) * WAD + BigInt(fraction.padEnd(18, "0"));
   return string.startsWith("-") ? -result : result;
 };
-export const pha = (value: unknown): number => Number(integer(value)) / 1e18;
+const pha = (value: unknown): number => Number(integer(value)) / 1e18;
 export const abs = (value: bigint): bigint => (value < 0n ? -value : value);
-export const close = (
+const close = (
   actual: number,
   expected: number,
   tolerance: number,
@@ -159,7 +159,7 @@ export function transferDelta(transfers: Row[], component: string): bigint {
   }
   return delta;
 }
-export function vaultFlow(events: Row[]): { assets: bigint; locked: bigint } {
+function vaultFlow(events: Row[]): { assets: bigint; locked: bigint } {
   let assets = 0n;
   let locked = 0n;
   for (const event of events) {

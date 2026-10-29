@@ -13,7 +13,8 @@ import {summary} from './chart-area'
 
 /**
  * Bar chart from the shadcn/ui chart examples (chart-bar-interactive) with the
- * axis from chart-area-axes and the legend from chart-bar-multiple. Each row is one period labelled by its first day.
+ * axis from chart-area-axes and legend from chart-bar-multiple.
+ * Each row is one period labelled by its first day.
  */
 export default function ChartBar({
   title,
