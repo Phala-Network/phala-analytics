@@ -47,8 +47,52 @@ for (const mode of [
       workers: [
         {
           name: 'analytics',
-          modules: true,
-          script,
+          modulesRoot: '/',
+          modules: [
+            {
+              type: 'ESModule',
+              path: '/entry.js',
+              contents: `
+                import worker from './worker.js'
+                let batches = 0
+                let statements = 0
+                let fail = false
+                let version = 'test-v1'
+                let wrapped
+                export default {
+                  ...worker,
+                  async fetch(request, env, ctx) {
+                    if (new URL(request.url).pathname === '/__test/cache') {
+                      if (request.method === 'POST') {
+                        const state = await request.json()
+                        fail = state.fail ?? false
+                        version = state.version ?? version
+                        wrapped = undefined
+                      }
+                      return Response.json({batches, statements})
+                    }
+                    if (!wrapped) {
+                      const DB = new Proxy(env.DB, {
+                        get(db, name) {
+                          if (name === 'batch') return (queries) => {
+                            batches++
+                            statements += queries.length
+                            if (fail) throw new Error('test-d1-unavailable')
+                            return db.batch(queries)
+                          }
+                          const value = Reflect.get(db, name)
+                          return typeof value === 'function' ? value.bind(db) : value
+                        },
+                      })
+                      wrapped = {...env, DB, VERSION: {id: version}}
+                    }
+                    return worker.fetch(request, wrapped, ctx)
+                  },
+                }
+              `,
+            },
+            {type: 'ESModule', path: '/worker.js', contents: script},
+          ],
           compatibilityDate: '2026-10-23',
           d1Databases: {DB: 'analytics-test'},
           r2Buckets: {BACKUP: 'backup-test'},
@@ -185,9 +229,23 @@ for (const mode of [
     }
     const worker = await runtime.getWorker('analytics')
     const stubs = await runtime.getWorker('upstream-stubs')
+    const cacheStats = async () =>
+      record(
+        await (
+          await worker.fetch('https://analytics.test/__test/cache')
+        ).json(),
+      )
+    const initialStats = await cacheStats()
+    for (let index = 0; index < 2; index++) {
+      const unhealthy = await worker.fetch('https://analytics.test/api/health')
+      assert.equal(unhealthy.status, 503)
+      assert.equal(unhealthy.headers.get('cache-control'), 'no-store')
+      assert.equal(unhealthy.headers.get('vercel-cdn-cache-control'), null)
+    }
     assert.equal(
-      (await worker.fetch('https://analytics.test/api/health')).status,
-      503,
+      Number((await cacheStats()).batches) - Number(initialStats.batches),
+      2,
+      'Unhealthy monitoring results are never cached',
     )
     const result = await worker.scheduled({cron: '17 * * * *', scheduledTime})
     const calls: unknown = await (
@@ -261,9 +319,18 @@ for (const mode of [
     }
     if (failed) {
       // Without served daily rows the API is unavailable, even with live data.
-      const empty = await worker.fetch('https://analytics.test/api/data')
-      assert.equal(empty.status, 503)
-      assert.equal(empty.headers.get('cache-control'), 'no-store')
+      const before = await cacheStats()
+      for (let index = 0; index < 2; index++) {
+        const empty = await worker.fetch('https://analytics.test/api/data')
+        assert.equal(empty.status, 503)
+        assert.equal(empty.headers.get('cache-control'), 'no-store')
+        assert.equal(empty.headers.get('vercel-cdn-cache-control'), null)
+      }
+      assert.equal(
+        Number((await cacheStats()).batches) - Number(before.batches),
+        2,
+        'Unavailable analytics results are never cached',
+      )
       assert.equal(
         checkpoint,
         mode === 'write-fail' ? 'old' : null,
@@ -296,9 +363,27 @@ for (const mode of [
       .prepare('INSERT INTO legacy_circulation_day VALUES (?, 5, 6)')
       .bind(preSeries)
       .run()
-    const response = await worker.fetch('https://analytics.test/api/data')
+    const beforeData = await cacheStats()
+    const [response, duplicate, dataHead] = await Promise.all([
+      worker.fetch('https://analytics.test/api/data'),
+      worker.fetch('https://analytics.test/api/data?ignored=true'),
+      worker.fetch('https://analytics.test/api/data', {method: 'HEAD'}),
+    ])
     assert.equal(response.status, 200)
     assert.equal(response.headers.get('cache-control'), 'public, max-age=60')
+    assert.equal(response.headers.get('vercel-cdn-cache-control'), 'max-age=60')
+    assert.equal(await dataHead.text(), '')
+    assert.deepEqual(await duplicate.json(), await response.clone().json())
+    const afterData = await cacheStats()
+    assert.equal(
+      Number(afterData.batches) - Number(beforeData.batches),
+      1,
+      'Concurrent analytics misses coalesce the entire D1 batch',
+    )
+    assert.equal(
+      Number(afterData.statements) - Number(beforeData.statements),
+      6,
+    )
     const data = record(await response.json())
     const projection = record(data.projection)
     assert.equal(
@@ -357,10 +442,32 @@ for (const mode of [
     })
     assert.equal(record(data.cloud.at(-2)).backfilled, true)
     assert.equal(record(data.cloud[0]).runningVcpu, null)
+    const beforeHealth = await cacheStats()
+    const health = await worker.fetch('https://analytics.test/api/health')
+    assert.equal(health.status, mode === 'unreviewed' ? 503 : 200)
+    assert.equal(health.headers.get('cache-control'), 'no-store')
     assert.equal(
-      (await worker.fetch('https://analytics.test/api/health')).status,
-      mode === 'unreviewed' ? 503 : 200,
+      health.headers.get('vercel-cdn-cache-control'),
+      mode === 'unreviewed' ? null : 'max-age=30',
     )
+    if (mode !== 'unreviewed') {
+      const healthy = await Promise.all([
+        worker.fetch('https://analytics.test/api/health?ignored=true'),
+        worker.fetch('https://analytics.test/api/health', {method: 'HEAD'}),
+      ])
+      assert.deepEqual(await healthy[0].json(), await health.clone().json())
+      assert.equal(await healthy[1].text(), '')
+      const afterHealth = await cacheStats()
+      assert.equal(
+        Number(afterHealth.batches) - Number(beforeHealth.batches),
+        1,
+        'Healthy monitoring cache hits avoid D1',
+      )
+      assert.equal(
+        Number(afterHealth.statements) - Number(beforeHealth.statements),
+        2,
+      )
+    }
     if (mode === 'unreviewed') {
       const unavailable = await worker.fetch('https://analytics.test/api/all')
       assert.equal(unavailable.status, 503)
@@ -513,6 +620,7 @@ for (const mode of [
         return rows.length
       }
       const beforeData = await requestCount()
+      const beforeCacheHit = await cacheStats()
       const again = record(
         await (await worker.fetch('https://analytics.test/api/data')).json(),
       )
@@ -520,8 +628,14 @@ for (const mode of [
       assert.equal(
         await requestCount(),
         beforeData,
-        'Live data shares the workerd cache',
+        'Whole analytics responses avoid upstream calls on cache hits',
       )
+      assert.deepEqual(
+        await cacheStats(),
+        beforeCacheHit,
+        'Whole analytics responses avoid D1 on cache hits',
+      )
+      assert.deepEqual(again, data)
       const all = await worker.fetch('https://analytics.test/api/all')
       assert.equal(all.status, 200)
       assert.equal(all.headers.get('access-control-allow-origin'), '*')
@@ -585,6 +699,33 @@ for (const mode of [
       )
       assert.equal(head.status, 200)
       assert.equal(await head.text(), '')
+      const control = (state: {version?: string; fail?: boolean}) =>
+        worker.fetch('https://analytics.test/__test/cache', {
+          method: 'POST',
+          body: JSON.stringify(state),
+        })
+      await control({version: 'test-v2', fail: true})
+      const beforeFailure = await cacheStats()
+      for (const path of ['/api/data', '/api/health']) {
+        for (let index = 0; index < 2; index++) {
+          const failed = await worker.fetch(`https://analytics.test${path}`)
+          assert.equal(failed.status, 503)
+          assert.equal(failed.headers.get('cache-control'), 'no-store')
+          assert.equal(failed.headers.get('vercel-cdn-cache-control'), null)
+        }
+      }
+      assert.equal(
+        Number((await cacheStats()).batches) - Number(beforeFailure.batches),
+        4,
+        'D1 exceptions are not cached, and a new release misses old entries',
+      )
+      await control({fail: false})
+      for (const path of ['/api/data', '/api/health'])
+        assert.equal(
+          (await worker.fetch(`https://analytics.test${path}`)).status,
+          200,
+          'Failures recover immediately without a cached 503',
+        )
     }
     const version = object.version
     await worker.scheduled({cron: '17 * * * *', scheduledTime: sunday})

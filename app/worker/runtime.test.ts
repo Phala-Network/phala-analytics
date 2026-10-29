@@ -1,6 +1,5 @@
 import {expect, test} from 'bun:test'
 import {mkdtemp, rm} from 'node:fs/promises'
-import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 test('analytics runs in real workerd with migrated local D1 and isolated upstreams', async () => {
@@ -32,7 +31,7 @@ test('analytics runs in real workerd with migrated local D1 and isolated upstrea
   const [runnerOutput] = runner.outputs
   if (!workerOutput || !runnerOutput)
     throw new Error('Runtime test bundle missing')
-  const directory = await mkdtemp(join(tmpdir(), 'phala-analytics-'))
+  const directory = await mkdtemp(join(import.meta.dir, 'runtime-'))
   try {
     const runnerPath = join(directory, 'runner.mjs')
     await Bun.write(runnerPath, await runnerOutput.text())

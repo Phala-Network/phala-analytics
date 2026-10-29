@@ -53,3 +53,27 @@ test('does not cache failures and recovers from storage failures', async () => {
   )
   expect(await unavailable('latest', 60, compute)).toBe('ok')
 })
+
+test('only stores healthy results and expires them after the short monitoring TTL', async () => {
+  const cached = createCached(memoryCache(), 'health')
+  const now = Date.now()
+  setSystemTime(now)
+  let calls = 0
+  let ok = false
+  const load = () =>
+    cached(
+      'health',
+      30,
+      async () => ({ok, calls: ++calls}),
+      ({ok}) => ok,
+    )
+  expect(await load()).toEqual({ok: false, calls: 1})
+  expect(await load()).toEqual({ok: false, calls: 2})
+  ok = true
+  expect(await load()).toEqual({ok: true, calls: 3})
+  expect(await load()).toEqual({ok: true, calls: 3})
+  setSystemTime(now + 30_000)
+  ok = false
+  expect(await load()).toEqual({ok: false, calls: 4})
+  expect(await load()).toEqual({ok: false, calls: 5})
+})

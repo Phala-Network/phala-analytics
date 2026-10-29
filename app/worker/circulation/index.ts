@@ -7,7 +7,7 @@ import {getSnapshot, parseSnapshotDate, SnapshotDateError} from './snapshot.js'
 import {SubgraphError} from './subgraph.js'
 
 // Worker Cache API entries are scoped by version; concurrent misses share work.
-// Client max-age is 60s for latest and 3600s for snapshots; no edge CDN cache is used.
+// Vercel's rewrite CDN has the same TTL as clients, using its targeted header.
 const LATEST_TTL_SECONDS = 60
 const LATEST_CACHE_CONTROL = 'public, max-age=60'
 // ChainDay snapshots are immutable within a subgraph deployment.
@@ -61,6 +61,7 @@ export const createCirculationApi = (
       return c.text('Service Unavailable', 503)
     }
     c.header('Cache-Control', LATEST_CACHE_CONTROL)
+    c.header('Vercel-CDN-Cache-Control', 'max-age=60')
     return c.text(data.totalCirculation)
   })
 
@@ -71,6 +72,7 @@ export const createCirculationApi = (
       return c.json({error: 'circulation_unavailable'}, 503)
     }
     c.header('Cache-Control', LATEST_CACHE_CONTROL)
+    c.header('Vercel-CDN-Cache-Control', 'max-age=60')
     return c.json(data)
   })
 
@@ -83,6 +85,7 @@ export const createCirculationApi = (
         getSnapshot(readConfig(c.env), target),
       )
       c.header('Cache-Control', SNAPSHOT_CACHE_CONTROL)
+      c.header('Vercel-CDN-Cache-Control', 'max-age=3600')
       return c.json(data)
     } catch (error) {
       c.header('Cache-Control', 'no-store')
