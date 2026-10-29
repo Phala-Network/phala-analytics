@@ -10,6 +10,7 @@ const run = async (args: string[]) => {
     cwd: app,
     stdout: 'pipe',
     stderr: 'pipe',
+    timeout: 60_000,
   })
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
@@ -17,7 +18,7 @@ const run = async (args: string[]) => {
     new Response(child.stderr).text(),
   ])
   if (code !== 0)
-    throw new Error(`vite ${args[0]} failed:\n${stdout}\n${stderr}`)
+    throw new Error(`vite ${args[0]} failed (${code}):\n${stdout}\n${stderr}`)
 }
 
 test('the build is self-contained and preview routes assets and the API', async () => {
@@ -32,27 +33,45 @@ test('the build is self-contained and preview routes assets and the API', async 
     expect(css).not.toMatch(/url\((?!["']?\/assets\/)/)
   }
 
+  // Reserve a free port, then let vite preview bind it.
+  const probe = Bun.serve({port: 0, fetch: () => new Response()})
+  const port = probe.port
+  await probe.stop(true)
+  const base = `http://127.0.0.1:${port}/`
   const preview = Bun.spawn(
-    ['bun', 'x', 'vite', 'preview', '--port', '0', '--strictPort'],
+    [
+      'bun',
+      'x',
+      'vite',
+      'preview',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--strictPort',
+    ],
     {cwd: app, stdout: 'pipe', stderr: 'pipe'},
   )
-  try {
-    // Vite prints the local URL once workerd serves the build output. Keep
-    // draining stdout afterwards: closing the pipe would stop the server.
-    let base = ''
-    let log = ''
-    const reader = preview.stdout.getReader()
+  // Drain both pipes so the server never blocks, and keep them for errors.
+  let log = ''
+  const drain = async (stream: ReadableStream<Uint8Array>) => {
     const decoder = new TextDecoder()
-    while (!base) {
-      const {done, value} = await reader.read()
-      if (done) break
-      log += decoder.decode(value)
-      base = log.match(/http:\/\/localhost:\d+\//)?.[0] ?? ''
+    for await (const chunk of stream) log += decoder.decode(chunk)
+  }
+  const drained = Promise.all([drain(preview.stdout), drain(preview.stderr)])
+  try {
+    const deadline = Date.now() + 60_000
+    for (;;) {
+      const ready = await fetch(base, {signal: AbortSignal.timeout(2_000)})
+        .then((response) => response.ok)
+        .catch(() => false)
+      if (ready) break
+      if (preview.exitCode !== null || Date.now() > deadline)
+        throw new Error(
+          `vite preview did not serve ${base} (exit ${preview.exitCode}):\n${log}`,
+        )
+      await Bun.sleep(250)
     }
-    void (async () => {
-      while (!(await reader.read()).done);
-    })()
-    if (!base) throw new Error(`vite preview did not start:\n${log}`)
     const get = (path: string, init?: RequestInit) =>
       fetch(new URL(path, base), {redirect: 'manual', ...init})
 
@@ -89,5 +108,6 @@ test('the build is self-contained and preview routes assets and the API', async 
   } finally {
     preview.kill()
     await preview.exited
+    await drained
   }
 }, 120_000)
