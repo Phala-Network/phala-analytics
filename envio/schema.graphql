@@ -1,0 +1,220 @@
+# Port of ../subgraph/schema.graphql. Entity and field names are unchanged.
+# Differences: no @entity directives (every type is an entity in HyperIndex);
+# Bytes ids (Transfer, VaultEvent, Holder) become ID! holding the same 0x hex;
+# BigDecimal columns get an explicit scale so 34-significant-digit values fit.
+# All token quantities are integer wei (18 decimals), unless stated otherwise.
+type ChainState {
+  id: ID!
+  chain: String!
+  nextDay: BigInt!
+  observedBlockNumber: BigInt!
+  observedBlockTimestamp: BigInt!
+  claimsStarted: Boolean!
+  totalSupply: BigInt!
+  reward: BigInt!
+  sunsetReward: BigInt!
+  phalaChainBridge: BigInt!
+  khalaLegacyChainBridge: BigInt!
+  khalaChainBridge: BigInt!
+  sygmaBridge: BigInt!
+  portalBridge: BigInt!
+  vaultBalance: BigInt!
+  khalaClaimCount: BigInt!
+  khalaFree: BigInt!
+  khalaStaked: BigInt!
+  phalaClaimCount: BigInt!
+  phalaFree: BigInt!
+  phalaStaked: BigInt!
+}
+
+type ChainDay {
+  id: ID!
+  chain: String!
+  date: String!
+  timestamp: BigInt!
+  observedBlockNumber: BigInt!
+  observedBlockTimestamp: BigInt!
+  totalSupply: BigInt!
+  reward: BigInt!
+  sunsetReward: BigInt!
+  phalaChainBridge: BigInt!
+  khalaLegacyChainBridge: BigInt!
+  khalaChainBridge: BigInt!
+  sygmaBridge: BigInt!
+  portalBridge: BigInt!
+  vaultBalance: BigInt!
+  vaultTotalAssets: BigInt!
+  vaultTreasuryAssets: BigInt!
+  vaultUnstakeLocked: BigInt!
+  vaultReward: BigInt!
+  circulation: BigInt!
+  vaultImplementation: Bytes!
+  vaultImplementationReviewed: Boolean!
+  accrualMode: String!
+}
+
+type Latest {
+  id: ID!
+  chain: String!
+  timestamp: BigInt!
+  observedBlockNumber: BigInt!
+  observedBlockTimestamp: BigInt!
+  totalSupply: BigInt!
+  reward: BigInt!
+  sunsetReward: BigInt!
+  phalaChainBridge: BigInt!
+  khalaLegacyChainBridge: BigInt!
+  khalaChainBridge: BigInt!
+  sygmaBridge: BigInt!
+  portalBridge: BigInt!
+  vaultBalance: BigInt!
+  vaultTotalAssets: BigInt!
+  vaultTreasuryAssets: BigInt!
+  vaultUnstakeLocked: BigInt!
+  vaultReward: BigInt!
+  circulation: BigInt!
+  shareSupply: BigInt!
+  sharePrice: BigDecimal! @config(precision: 80, scale: 40)
+  apr: BigDecimal! @config(precision: 80, scale: 40)
+  stakers: BigInt!
+  vaultImplementation: Bytes!
+  vaultImplementationReviewed: Boolean!
+  accrualMode: String!
+}
+
+type Transfer {
+  id: ID!
+  from: Bytes!
+  to: Bytes!
+  amount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: Bytes!
+  logIndex: BigInt!
+}
+
+type VaultState {
+  id: ID!
+  implementation: Bytes!
+  checkpointTime: BigInt!
+  checkpointTotalAssets: BigInt!
+  checkpointTreasuryAssets: BigInt!
+  rewardRate: BigInt!
+  treasuryRatio: BigInt!
+  paused: Boolean!
+  shareSupply: BigInt!
+  stakers: BigInt!
+  unstakeLocked: BigInt!
+  dailyRewards: BigInt!
+  dailyTreasuryRewards: BigInt!
+  deposits: BigInt!
+  withdrawRequests: BigInt!
+  claims: BigInt!
+  treasuryClaims: BigInt!
+  depositCount: BigInt!
+  withdrawRequestCount: BigInt!
+  claimCount: BigInt!
+  treasurySettlementCount: BigInt!
+  settlementTotalAssets: BigInt
+  vaultImplementationReviewed: Boolean!
+  accrualMode: String!
+}
+
+type VaultDay {
+  id: ID!
+  date: String!
+  flowDate: String!
+  timestamp: BigInt!
+  observedBlockNumber: BigInt!
+  observedBlockTimestamp: BigInt!
+  totalAssets: BigInt!
+  treasuryAssets: BigInt!
+  shareSupply: BigInt!
+  sharePrice: BigDecimal! @config(precision: 80, scale: 40)
+  apr: BigDecimal! @config(precision: 80, scale: 40)
+  stakers: BigInt!
+  unstakeLocked: BigInt!
+  rewardRate: BigInt!
+  treasuryRatio: BigInt!
+  paused: Boolean!
+  dailyRewards: BigInt!
+  dailyTreasuryRewards: BigInt!
+  deposits: BigInt!
+  withdrawRequests: BigInt!
+  claims: BigInt!
+  treasuryClaims: BigInt!
+  depositCount: BigInt!
+  withdrawRequestCount: BigInt!
+  claimCount: BigInt!
+  treasurySettlementCount: BigInt!
+  settlementTotalAssets: BigInt
+  vaultImplementation: Bytes!
+  vaultImplementationReviewed: Boolean!
+  accrualMode: String!
+}
+
+type VaultEvent {
+  settlementAssets: BigInt
+  id: ID!
+  kind: String!
+  assets: BigInt!
+  shares: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: Bytes!
+  logIndex: BigInt!
+  unstakeLockedAfter: BigInt!
+  checkpointTime: BigInt!
+  checkpointTotalAssets: BigInt!
+  checkpointTreasuryAssets: BigInt!
+  rewardRate: BigInt!
+  treasuryRatio: BigInt!
+  shareSupply: BigInt!
+  paused: Boolean!
+  implementation: Bytes!
+  vaultImplementationReviewed: Boolean!
+  accrualMode: String!
+}
+
+type Holder {
+  id: ID!
+  shares: BigInt!
+}
+
+type Claimed {
+  id: ID!
+  block_number: BigInt!
+  timestamp_: BigInt!
+  transactionHash_: String!
+  contractId_: String!
+  user: String
+  free: BigInt
+  staked: BigInt
+  receiver: String
+}
+
+type ClaimedAndBridged {
+  id: ID!
+  block_number: BigInt!
+  timestamp_: BigInt!
+  transactionHash_: String!
+  contractId_: String!
+  user: String
+  free: BigInt
+  staked: BigInt
+  l1Receiver: String
+  l2Receiver: String
+}
+
+type ClaimDay {
+  id: ID!
+  date: String!
+  flowDate: String!
+  timestamp: BigInt!
+  khalaClaimCount: BigInt!
+  khalaFree: BigInt!
+  khalaStaked: BigInt!
+  phalaClaimCount: BigInt!
+  phalaFree: BigInt!
+  phalaStaked: BigInt!
+}
