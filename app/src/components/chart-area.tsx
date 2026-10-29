@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/chart'
 import {formatCompact, formatDay, formatMonth, formatNumber} from '@/lib/format'
 import {cellValue, type Row, type Series} from '@/lib/series'
-import {cn} from '@/lib/utils'
 
 /** Text alternative: the range and the latest value of each series. */
 export const summary = (title: string, rows: Row[], series: Series[]) => {
@@ -36,15 +35,15 @@ export const summary = (title: string, rows: Row[], series: Series[]) => {
 
 /**
  * Area chart from the shadcn/ui chart examples (chart-area-interactive,
- * chart-area-stacked, chart-area-axes, chart-area-legend). Loaded lazily, so
- * Recharts does not delay the figures.
+ * chart-area-stacked, chart-area-axes, chart-area-legend). Every chart has a
+ * legend, so plots in a row share one height. Loaded lazily, so Recharts does
+ * not delay the figures.
  */
 export default function ChartArea({
   title,
   rows,
   series,
   shaded = [],
-  className,
 }: {
   title: string
   rows: Row[]
@@ -52,7 +51,6 @@ export default function ChartArea({
   series: (Series & {color: string})[]
   /** Inclusive [first, last] UTC days to shade. */
   shaded?: [string, string][]
-  className?: string
 }) {
   const id = useId().replaceAll(':', '')
   const chartConfig = Object.fromEntries(
@@ -77,7 +75,7 @@ export default function ChartArea({
   return (
     <ChartContainer
       config={chartConfig}
-      className={cn('aspect-auto w-full', className)}
+      className="aspect-auto h-[250px] w-full"
       style={colors}
       role="img"
       aria-label={summary(title, rows, series)}
@@ -154,7 +152,7 @@ export default function ChartArea({
             isAnimationActive={false}
           />
         ))}
-        {series.length > 1 && <ChartLegend content={<ChartLegendContent />} />}
+        <ChartLegend content={<ChartLegendContent />} />
       </AreaChart>
     </ChartContainer>
   )

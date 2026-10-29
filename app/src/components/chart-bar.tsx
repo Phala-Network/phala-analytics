@@ -2,6 +2,8 @@ import {Bar, BarChart, CartesianGrid, XAxis, YAxis} from 'recharts'
 import {
   type ChartConfig,
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart'
@@ -11,7 +13,7 @@ import {summary} from './chart-area'
 
 /**
  * Bar chart from the shadcn/ui chart examples (chart-bar-interactive) with the
- * axis from chart-area-axes. Each row is one period labelled by its first day.
+ * axis from chart-area-axes and the legend from chart-bar-multiple. Each row is one period labelled by its first day.
  */
 export default function ChartBar({
   title,
@@ -72,6 +74,7 @@ export default function ChartBar({
             />
           }
         />
+        <ChartLegend content={<ChartLegendContent />} />
         <Bar
           dataKey={key}
           fill={`var(--color-${key})`}

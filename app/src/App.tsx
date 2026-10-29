@@ -1,16 +1,23 @@
-import {
-  DownloadIcon,
-  InfoIcon,
-  RotateCwIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+import {DownloadIcon, InfoIcon, TriangleAlertIcon} from 'lucide-react'
 import {type ReactNode, useMemo} from 'react'
 import {ChartCard} from '@/components/chart-card'
 import {MetricCard} from '@/components/metric-card'
 import {PhalaLogo} from '@/components/phala-logo'
-import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert'
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {Separator} from '@/components/ui/separator'
 import {useAnalytics} from '@/hooks/use-analytics'
 import {
@@ -67,9 +74,11 @@ const LINKS = [
   {href: 'https://phala.com/discord', label: 'Discord'},
 ]
 
-// Section-cards grid from dashboard-01; column counts follow the card count.
+// Section-cards grid from dashboard-01, verbatim.
 const CARDS =
-  'grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card'
+  'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card'
+// The same grid for chart cards, two per row.
+const CHARTS = 'grid grid-cols-1 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-2'
 
 const derive = (data: AnalyticsData) => {
   const vault = data.vault.at(-1)
@@ -141,6 +150,8 @@ const derive = (data: AnalyticsData) => {
   }
 }
 
+// Heading and description from the shadcn/ui tasks example; the column gap
+// and padding are the dashboard-01 page's.
 function Section({
   id,
   title,
@@ -153,30 +164,23 @@ function Section({
   children: ReactNode
 }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-4 px-4 lg:px-6">
-      <div className="flex flex-col gap-1">
-        <h2 id={id} className="text-xl font-semibold">
+    <section aria-labelledby={id} className="flex flex-col gap-4 md:gap-6">
+      <div className="flex flex-col gap-1 px-4 lg:px-6">
+        <h2 id={id} className="text-2xl font-semibold tracking-tight">
           {title}
         </h2>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
+        {description && <p className="text-muted-foreground">{description}</p>}
       </div>
       {children}
     </section>
   )
 }
 
-const ExternalLink = ({
-  href,
-  children,
-}: {
-  href: string
-  children: ReactNode
-}) => (
+// Link from the shadcn/ui typography example.
+const Link = ({href, children}: {href: string; children: ReactNode}) => (
   <a
     href={href}
-    className="font-medium text-foreground underline underline-offset-4"
+    className="font-medium text-primary underline underline-offset-4"
   >
     {children}
   </a>
@@ -191,9 +195,10 @@ export function App() {
   const claims = view?.claims
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <>
+      {/* SiteHeader from dashboard-01; the links follow its GitHub button. */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b">
-        <div className="mx-auto flex w-full max-w-7xl items-center gap-1 px-4 lg:gap-2 lg:px-6">
+        <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
           <PhalaLogo className="h-6 w-auto" />
           <Separator
             orientation="vertical"
@@ -204,11 +209,13 @@ export function App() {
           </h1>
           <nav
             aria-label="Phala links"
-            className="ml-auto flex items-center gap-1"
+            className="ml-auto flex items-center gap-2"
           >
             {LINKS.map(({href, label}) => (
-              <Button key={href} variant="ghost" size="sm" asChild>
-                <a href={href}>{label}</a>
+              <Button key={href} variant="ghost" asChild size="sm">
+                <a href={href} className="dark:text-foreground">
+                  {label}
+                </a>
               </Button>
             ))}
           </nav>
@@ -216,72 +223,59 @@ export function App() {
       </header>
 
       <main
-        className="@container/main mx-auto flex w-full max-w-7xl flex-1 flex-col gap-2"
+        className="@container/main flex flex-1 flex-col gap-2"
         aria-busy={state.status === 'loading'}
       >
-        <div className="flex flex-col gap-8 py-4 md:gap-10 md:py-6">
-          <div className="flex flex-col gap-3 px-4 lg:px-6">
-            <p className="max-w-3xl text-muted-foreground">
+        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+          <div className="px-4 lg:px-6">
+            <p className="text-xl text-muted-foreground">
               Phala: The New Cloud for Confidential AI. Hardware-secured compute
               platform that delivers verifiable AI with enterprise-grade
               privacy. Deploy confidential AI models with TEE protection in
               minutes.
             </p>
-            <div
-              role="status"
-              className="flex min-h-8 items-center gap-2 text-sm"
-            >
-              {state.status === 'error' ? (
-                <Alert variant="destructive" className="max-w-md">
-                  <TriangleAlertIcon />
-                  <AlertTitle>
-                    Analytics data is temporarily unavailable.
-                  </AlertTitle>
-                  <AlertDescription>
-                    <Button variant="outline" size="sm" onClick={retry}>
-                      <RotateCwIcon data-icon="inline-start" />
-                      Retry
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <Badge variant="outline">
-                  {view ? `Updated ${view.updated}` : 'Loading data…'}
-                </Badge>
-              )}
-            </div>
           </div>
+          {state.status === 'error' && (
+            <div className="px-4 lg:px-6">
+              <Alert variant="destructive">
+                <TriangleAlertIcon />
+                <AlertTitle>
+                  Analytics data is temporarily unavailable.
+                </AlertTitle>
+                <AlertAction>
+                  <Button size="xs" variant="default" onClick={retry}>
+                    Retry
+                  </Button>
+                </AlertAction>
+              </Alert>
+            </div>
+          )}
 
           <Section
             id="token"
             title="$PHA Token"
             description={
-              <ExternalLink href="https://coinmarketcap.com/currencies/phala-network/">
+              <Link href="https://coinmarketcap.com/currencies/phala-network/">
                 CoinMarketCap
-              </ExternalLink>
+              </Link>
             }
           >
-            <ChartCard
-              title="Circulating supply"
-              description="By chain at 00:00 UTC each day, stacked (PHA)"
-              rows={view?.rows.circulation}
-              series={CIRCULATION}
-              headline={
-                <div className="flex flex-col gap-1 pt-2">
-                  <div className="text-2xl font-semibold tabular-nums @[250px]/card-header:text-3xl">
-                    {view ? (
-                      `${view.circulation} PHA`
-                    ) : (
-                      <span className="inline-block h-8" />
-                    )}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {view ? `Now, as of ${view.circulationAsOf}` : ' '}
-                  </div>
-                </div>
-              }
-              footer="Ethereum plus the Phala and Khala chains until their sunset. Base PHA is counted through the Ethereum Portal escrow."
-            />
+            <div className={CARDS}>
+              <MetricCard
+                label="Circulating supply (PHA)"
+                value={view?.circulation}
+                secondary={view && `Now, as of ${view.circulationAsOf}`}
+              />
+            </div>
+            <div className="px-4 lg:px-6">
+              <ChartCard
+                title="Circulating supply"
+                description="By chain at 00:00 UTC each day, stacked (PHA)"
+                rows={view?.rows.circulation}
+                series={CIRCULATION}
+                footer="Ethereum plus the Phala and Khala chains until their sunset. Base PHA is counted through the Ethereum Portal escrow."
+              />
+            </div>
           </Section>
 
           <Section
@@ -290,30 +284,29 @@ export function App() {
             description={
               <>
                 Stake $PHA on Ethereum to get rewards:{' '}
-                <ExternalLink href="https://app.phala.network/staking">
+                <Link href="https://app.phala.network/staking">
                   app.phala.network/staking
-                </ExternalLink>
+                </Link>
               </>
             }
           >
             {view && !view.vault.reviewed && (
-              <Alert role="note">
-                <InfoIcon />
-                <AlertTitle>Vault upgrade under review</AlertTitle>
-                <AlertDescription>
-                  The Vault runs an implementation that has not been reviewed
-                  yet. Its figures are shown as indexed, and APR is hidden until
-                  the review is complete.
-                </AlertDescription>
-              </Alert>
+              <div className="px-4 lg:px-6">
+                <Alert role="note">
+                  <InfoIcon />
+                  <AlertTitle>Vault upgrade under review</AlertTitle>
+                  <AlertDescription>
+                    The Vault runs an implementation that has not been reviewed
+                    yet. Its figures are shown as indexed, and APR is hidden
+                    until the review is complete.
+                  </AlertDescription>
+                </Alert>
+              </div>
             )}
-            <div
-              className={`${CARDS} @xl/main:grid-cols-2 @5xl/main:grid-cols-3`}
-            >
+            <div className={CARDS}>
               <MetricCard
-                className="@xl/main:col-span-2 @5xl/main:col-span-1"
-                label="Total assets"
-                value={view && `${view.vault.totalAssets} PHA`}
+                label="Total assets (PHA)"
+                value={view?.vault.totalAssets}
                 secondary={view?.vault.vaultAsOf}
               />
               <MetricCard
@@ -333,7 +326,7 @@ export function App() {
                 secondary={view?.vault.vaultAsOf}
               />
             </div>
-            <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-2">
+            <div className={CHARTS}>
               <ChartCard
                 title="Total assets"
                 description="At 00:00 UTC each day (PHA)"
@@ -342,12 +335,11 @@ export function App() {
               />
               <ChartCard
                 title="Weekly rewards"
-                description="Rewards accrued per week, Monday to Sunday UTC (PHA)"
+                description="Complete weeks, Monday to Sunday UTC (PHA)"
                 rows={view?.rows.weeklyRewards}
                 series={WEEKLY_REWARDS}
                 bars={{periodLabel: 'Week of'}}
                 table={{rows: view?.rows.dailyRewards, series: DAILY_REWARDS}}
-                footer="Complete weeks only; the data table lists each day's rewards, including the current week."
               />
             </div>
           </Section>
@@ -357,7 +349,7 @@ export function App() {
             title="Sunset claims"
             description="PHA claimed on Ethereum by former Khala and Phala chain holders"
           >
-            <div className={`${CARDS} @3xl/main:grid-cols-2`}>
+            <div className={CARDS}>
               <MetricCard
                 label="Claims"
                 value={
@@ -377,7 +369,7 @@ export function App() {
                 value={
                   view &&
                   (claims
-                    ? `${formatNumber(claims.amount[0] + claims.amount[1])} PHA`
+                    ? formatNumber(claims.amount[0] + claims.amount[1])
                     : '–')
                 }
                 primary={
@@ -390,23 +382,23 @@ export function App() {
           </Section>
 
           <Section id="cloud" title="Phala Cloud">
-            <div
-              className={`${CARDS} @xl/main:grid-cols-2 @5xl/main:grid-cols-3 @7xl/main:grid-cols-5`}
-            >
+            <div className={CARDS}>
               <MetricCard
                 label="Users"
                 value={view?.cloud.users.value}
                 secondary={view?.cloud.users.asOf}
               />
               <MetricCard
-                label="Total VMs"
+                label="VMs"
                 value={view?.cloud.totalVms.value}
+                action={
+                  view?.cloud.runningVms.asOf && (
+                    <Badge variant="outline">
+                      {view.cloud.runningVms.value} running
+                    </Badge>
+                  )
+                }
                 secondary={view?.cloud.totalVms.asOf}
-              />
-              <MetricCard
-                label="Running VMs"
-                value={view?.cloud.runningVms.value}
-                secondary={view?.cloud.runningVms.asOf}
               />
               <MetricCard
                 label="Total vCPU"
@@ -414,13 +406,12 @@ export function App() {
                 secondary={view?.cloud.vcpu.asOf}
               />
               <MetricCard
-                className="@xl/main:col-span-2 @7xl/main:col-span-1"
                 label="Annual revenue in PHA"
-                value={view && `${view.cloud.captured.value} PHA`}
+                value={view?.cloud.captured.value}
                 secondary={view?.cloud.captured.asOf}
               />
             </div>
-            <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-2">
+            <div className={CHARTS}>
               <ChartCard
                 title="Users"
                 description="Daily total"
@@ -451,39 +442,48 @@ export function App() {
               />
             </div>
             {view && view.shaded.length > 0 && (
-              <Alert role="note">
-                <InfoIcon />
-                <AlertTitle>Backfilled days are shaded</AlertTitle>
-                <AlertDescription>
-                  {view.shaded.map(formatDayRange).join(', ')}: Phala Cloud
-                  recomputes past days using each VM's and user's current
-                  status, so running VMs and users are understated for those
-                  days.
-                </AlertDescription>
-              </Alert>
+              <div className="px-4 lg:px-6">
+                <Alert role="note">
+                  <InfoIcon />
+                  <AlertTitle>Backfilled days are shaded</AlertTitle>
+                  <AlertDescription>
+                    {view.shaded.map(formatDayRange).join(', ')}: Phala Cloud
+                    recomputes past days using each VM's and user's current
+                    status, so running VMs and users are understated for those
+                    days.
+                  </AlertDescription>
+                </Alert>
+              </div>
             )}
           </Section>
+
+          <footer className="px-4 lg:px-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <h2>Data</h2>
+                </CardTitle>
+                <CardDescription>
+                  {view ? `Updated ${view.updated}.` : 'Loading data…'} Daily
+                  values are UTC days. Sources: the Phala Ethereum subgraph, the
+                  archived Phala and Khala chain history, Phala Cloud usage
+                  statistics, and daily PHA prices from Dune through September
+                  22, 2026 and DefiLlama (CoinGecko-sourced) after. Data
+                  refreshes hourly.
+                </CardDescription>
+              </CardHeader>
+              <CardFooter>
+                <Button variant="outline" size="sm" asChild>
+                  <a href="/api/data">
+                    <DownloadIcon data-icon="inline-start" />
+                    Download the data (JSON)
+                  </a>
+                </Button>
+              </CardFooter>
+            </Card>
+          </footer>
         </div>
       </main>
-
-      <footer className="border-t">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-6 text-sm text-muted-foreground lg:px-6">
-          <p className="max-w-3xl">
-            Daily values are UTC days. Sources: the Phala Ethereum subgraph, the
-            archived Phala and Khala chain history, Phala Cloud usage
-            statistics, and daily PHA prices from Dune through September 22,
-            2026 and DefiLlama (CoinGecko-sourced) after. Data refreshes hourly.
-          </p>
-          <div>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/api/data">
-                <DownloadIcon data-icon="inline-start" />
-                Download the data (JSON)
-              </a>
-            </Button>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </>
   )
 }
