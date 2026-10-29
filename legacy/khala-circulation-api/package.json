@@ -1,0 +1,24 @@
+{
+  "name": "khala-circulation-api",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "typecheck": "cf workers types && tsc --noEmit",
+    "check": "biome ci .",
+    "test": "node --test worker/index.test.ts",
+    "build": "cf build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.3",
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.7",
+    "@types/node": "24.19.2",
+    "cf": "1.0.0-beta.25",
+    "miniflare": "5.20261023.0-beta",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}

@@ -15,8 +15,25 @@ bun install --frozen-lockfile
 bun run verify
 ```
 
-Run `bun run verify:subgraph` or `bun run verify:app` for one package. CI runs root Biome checks and the affected packages; changes to shared tooling run both packages. Package-specific development and deployment commands run from that package's directory.
+Run `bun run verify:subgraph`, `bun run verify:app` or `bun run verify:khala-circulation-api` for one package. CI runs root Biome checks and the affected packages; changes to shared tooling run all packages. Package-specific development and deployment commands run from that package's directory.
 
 Production app deploys automatically through Cloudflare Workers Builds after CI-passed PRs merge to protected `main`; preview builds are disabled. Subgraph deployments remain manual and require the upgrade gate. See [deployment and rollback](docs/OPERATIONS.md#dashboard-and-api-deployment) for the build settings and emergency fallback.
 
 See [docs/OPERATIONS.md](docs/OPERATIONS.md) for consumers, upstream services, upgrade and recovery runbooks, and archives.
+
+## Legacy Khala supply alias
+
+[`legacy/khala-circulation-api/`](legacy/khala-circulation-api/) keeps `https://khala-circulation-api.phala-dev.workers.dev/` for existing callers. Every path and method reads `/api/circulation` with GET through a service binding to `phala-analytics`, preserving its status, body, Content-Type and Cache-Control. Binding failures return an uncached plain-text 503. Deployment is manual, from its directory with the intended Cloudflare profile:
+
+```bash
+cd legacy/khala-circulation-api
+bunx cf deploy
+```
+
+Record the preceding Worker version before deploying. To roll back, promote that version from the same directory, then verify the legacy hostname:
+
+```bash
+bunx cf workers deployments create --worker khala-circulation-api \
+  --strategy percentage \
+  --versions '[{"version_id":"<previous-version-id>","percentage":100}]'
+```
