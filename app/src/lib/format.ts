@@ -15,8 +15,10 @@ const day = new Intl.DateTimeFormat(undefined, {
   timeZone: 'UTC',
 })
 const dateTime = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
   timeZone: 'UTC',
 })
 const month = new Intl.DateTimeFormat(undefined, {
@@ -37,7 +39,7 @@ export const dayTime = (date: string) => Date.parse(`${date}T00:00:00Z`)
 export const formatDay = (date: string) => day.format(dayTime(date))
 export const formatDayRange = ([first, last]: readonly [string, string]) =>
   first === last ? formatDay(first) : `${formatDay(first)} – ${formatDay(last)}`
-/** An ISO timestamp as a UTC date and time, e.g. "Oct 28, 2026, 2:27 PM UTC". */
+/** A recent ISO timestamp as a UTC date and time, e.g. "Oct 28, 2:27 PM UTC". */
 export const formatTimestamp = (iso: string) =>
   `${dateTime.format(Date.parse(iso))} UTC`
 /** Axis label for a YYYY-MM-DD date, e.g. "Jan 2025". */

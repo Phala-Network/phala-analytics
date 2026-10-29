@@ -77,6 +77,9 @@ const LINKS = [
 // Section-cards grid from dashboard-01, verbatim.
 const CARDS =
   'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card'
+// The same grid with two columns, for two cards per row.
+const CARDS_2 =
+  'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 dark:*:data-[slot=card]:bg-card'
 // The same grid for chart cards, two per row.
 const CHARTS = 'grid grid-cols-1 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-2'
 
@@ -251,6 +254,36 @@ export function App() {
             </div>
           )}
 
+          {/* Overview: the block's four section cards. */}
+          <div className={CARDS}>
+            <MetricCard
+              label="Circulating supply (PHA)"
+              value={view?.circulation}
+              secondary={view && `As of ${view.circulationAsOf}`}
+            />
+            <MetricCard
+              label="Vault total assets (PHA)"
+              value={view?.vault.totalAssets}
+              secondary={view?.vault.vaultAsOf}
+            />
+            <MetricCard
+              label="Vault APR"
+              value={view?.vault.apr}
+              action={
+                view &&
+                !view.vault.reviewed && (
+                  <Badge variant="outline">Under review</Badge>
+                )
+              }
+              secondary={view?.vault.vaultAsOf}
+            />
+            <MetricCard
+              label="Vault stakers"
+              value={view?.vault.stakers}
+              secondary={view?.vault.vaultAsOf}
+            />
+          </div>
+
           <Section
             id="token"
             title="$PHA Token"
@@ -260,13 +293,6 @@ export function App() {
               </Link>
             }
           >
-            <div className={CARDS}>
-              <MetricCard
-                label="Circulating supply (PHA)"
-                value={view?.circulation}
-                secondary={view && `Now, as of ${view.circulationAsOf}`}
-              />
-            </div>
             <div className="px-4 lg:px-6">
               <ChartCard
                 title="Circulating supply"
@@ -303,29 +329,6 @@ export function App() {
                 </Alert>
               </div>
             )}
-            <div className={CARDS}>
-              <MetricCard
-                label="Total assets (PHA)"
-                value={view?.vault.totalAssets}
-                secondary={view?.vault.vaultAsOf}
-              />
-              <MetricCard
-                label="APR"
-                value={view?.vault.apr}
-                action={
-                  view &&
-                  !view.vault.reviewed && (
-                    <Badge variant="outline">Under review</Badge>
-                  )
-                }
-                secondary={view?.vault.vaultAsOf}
-              />
-              <MetricCard
-                label="Stakers"
-                value={view?.vault.stakers}
-                secondary={view?.vault.vaultAsOf}
-              />
-            </div>
             <div className={CHARTS}>
               <ChartCard
                 title="Total assets"
@@ -349,7 +352,7 @@ export function App() {
             title="Sunset claims"
             description="PHA claimed on Ethereum by former Khala and Phala chain holders"
           >
-            <div className={CARDS}>
+            <div className={CARDS_2}>
               <MetricCard
                 label="Claims"
                 value={
