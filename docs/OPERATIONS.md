@@ -107,19 +107,22 @@ API success responses use `Vercel-CDN-Cache-Control` with the CDN TTL above;
 Vercel consumes and strips it while forwarding the existing client
 `Cache-Control` unchanged. Direct Worker responses include the targeted header.
 The header is set only after a successful computation, never as a blanket
-route override. External rewrite caching is automatic for Vercel projects
-created on or after April 6, 2026; older projects require dashboard opt-in or
-`x-vercel-enable-rewrite-caching: 1`. Confirm the compatibility project's
-setting before relying on Vercel cache hits. API headers do not change that
-project setting.
+route override. The Vercel TTLs in the table require external rewrite caching.
+The `pha-circulation-server` project predates April 6, 2026, so
+[`circulation-api/vercel.json`](../circulation-api/vercel.json) explicitly sets
+`x-vercel-enable-rewrite-caching: 1` for `/api/:path*`. This opts the proxy in to
+honoring upstream cache headers; the Worker's targeted header controls the TTL.
+Newer Vercel projects enable this behavior by default.
 
-After rollout, repeat a successful request through the Vercel hostname and
-check `x-vercel-cache: HIT`, unchanged client `Cache-Control`, and absence of
-`Vercel-CDN-Cache-Control`. Check direct success and 503 headers as well.
+After deploying the proxy configuration, repeat a successful request through
+the Vercel hostname within its TTL and check `x-vercel-cache: HIT`, unchanged
+client `Cache-Control`, and absence of `Vercel-CDN-Cache-Control`. Check direct
+success and 503 headers as well.
 The direct cache namespace changes with each Worker version; Vercel and
-browser snapshot responses can remain for another hour each. Purge Vercel's
-CDN when immediate invalidation is required after a subgraph tag/code change;
-browser caches still expire naturally.
+browser snapshot responses can remain for another hour each. A new Worker
+version does not purge Vercel's CDN. Purge that CDN when immediate invalidation
+is required after a subgraph tag/code change; browser caches still expire
+naturally.
 
 Suggested starting WAF limits (operator-configured, not part of this change):
 300 requests per 60 s per client IP across `/api/*`, with a 60 s block; where
@@ -140,7 +143,7 @@ direct clients.
 References: [Workers Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/),
 [Static Assets headers](https://developers.cloudflare.com/workers/static-assets/headers/),
 [Vercel cache-control priority/stripping](https://vercel.com/docs/caching/cache-control-headers#vercel-cdn-cache-control),
-and [external rewrite caching](https://vercel.com/docs/routing/rewrites#caching-rewrites-to-external-origins).
+and [rewrite-cache opt-in for older projects](https://vercel.com/docs/routing/rewrites#honoring-cache-control-headers-for-older-projects).
 
 ## Goldsky deployments and limits
 

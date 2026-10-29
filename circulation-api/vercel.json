@@ -4,5 +4,16 @@
       "source": "/api/:path*",
       "destination": "https://analytics.phala.network/api/:path*"
     }
+  ],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "1"
+        }
+      ]
+    }
   ]
 }

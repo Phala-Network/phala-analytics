@@ -111,10 +111,14 @@ Successful responses also set `Vercel-CDN-Cache-Control: max-age=60` (latest)
 or `max-age=3600` (snapshots). Vercel's external rewrite caches using this
 targeted header, then strips it before sending the public response and keeps
 client `Cache-Control` unchanged. Direct Worker clients see the targeted header.
-Older Vercel projects require rewrite-cache opt-in; see the
+The compatibility project predates April 6, 2026;
+[`circulation-api/vercel.json`](../circulation-api/vercel.json) opts its
+`/api/:path*` rewrite in with `x-vercel-enable-rewrite-caching: 1`. After deploying
+that configuration, repeat a successful request within its TTL and confirm
+`x-vercel-cache: HIT`; see the
 [operations audit](OPERATIONS.md#caching-and-request-cost). The comparison
-script's public-header list is unchanged because Vercel documents this header
-as client-invisible on its responses.
+script's public-header list is unchanged because Vercel documents the targeted
+cache-control header as client-invisible on its responses.
 
 Cloudflare's Cache API does not support stale-while-revalidate; expired
 entries are recomputed and no stale fallback is introduced. Vercel also uses
