@@ -53,9 +53,10 @@ indexer, and health reports 503.
 
 Cloud archive rows through September 22, 2026 retain the original values,
 including captured PHA. New rows use `source='api'` for the just-closed day and
-`source='api-backfill'` for older missing days. The Cloud API recomputes old
-running statistics and user counts using current VM/user status, so historical
-gaps understate running VMs. The API exposes `backfilled: true` on those rows.
+`source='api-backfill'` for older missing days. The Cloud API recomputes past
+days from each VM's and user's current status, so those days understate running
+VMs and users. The API marks them `backfilled: true`; the page draws them like
+any other day.
 `running_vcpu` and `active_users` are captured when available; archive rows
 have null values for both.
 
@@ -148,7 +149,7 @@ Vault rewards are summed per ISO week (Monday to Sunday UTC) of their
 `flowDate` and drawn as bars. The latest week appears once its Sunday has a
 row; the data table lists each day, including the current week.
 Sunset claims are shown as totals. APR is hidden while the latest Vault row is
-unreviewed. Backfilled Cloud days are shaded in the Users and VMs charts.
+unreviewed.
 
 All assets, including the Geist font, are bundled; nothing loads from a CDN.
 `public/_headers` sets the CSP on static assets (Worker responses are

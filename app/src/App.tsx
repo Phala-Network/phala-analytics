@@ -24,13 +24,11 @@ import {
   dayTime,
   formatCompact,
   formatDay,
-  formatDayRange,
   formatNumber,
   formatPercent,
   formatTimestamp,
 } from '@/lib/format'
 import {
-  backfillRanges,
   latest,
   type Row,
   type Series,
@@ -126,7 +124,6 @@ const derive = (data: AnalyticsData) => {
       vcpu: cloud('totalVcpu'),
       captured: cloud('captured'),
     },
-    shaded: backfillRanges(data.cloud),
     rows: {
       circulation: toRows(
         data.circulation,
@@ -199,9 +196,11 @@ export function App() {
 
   return (
     <>
-      {/* SiteHeader from dashboard-01; the links follow its GitHub button. */}
+      {/* SiteHeader from dashboard-01; the links follow its GitHub button.
+          Its row and main share one page width, as on the shadcn/ui site
+          (max-w-(--breakpoint-2xl)). */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b">
-        <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
+        <div className="mx-auto flex w-full max-w-(--breakpoint-2xl) items-center gap-1 px-4 lg:gap-2 lg:px-6">
           <PhalaLogo className="h-6 w-auto" />
           <Separator
             orientation="vertical"
@@ -226,7 +225,7 @@ export function App() {
       </header>
 
       <main
-        className="@container/main flex flex-1 flex-col gap-2"
+        className="@container/main mx-auto flex w-full max-w-(--breakpoint-2xl) flex-1 flex-col gap-2"
         aria-busy={state.status === 'loading'}
       >
         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
@@ -420,16 +419,12 @@ export function App() {
                 description="Daily total"
                 rows={view?.rows.cloud}
                 series={USERS}
-                shaded={view?.shaded}
-                shadedLabel="recomputed"
               />
               <ChartCard
                 title="VMs"
                 description="Total and running, daily"
                 rows={view?.rows.cloud}
                 series={VMS}
-                shaded={view?.shaded}
-                shadedLabel="recomputed"
               />
               <ChartCard
                 title="Total vCPUs"
@@ -444,20 +439,6 @@ export function App() {
                 series={REVENUE}
               />
             </div>
-            {view && view.shaded.length > 0 && (
-              <div className="px-4 lg:px-6">
-                <Alert role="note">
-                  <InfoIcon />
-                  <AlertTitle>Backfilled days are shaded</AlertTitle>
-                  <AlertDescription>
-                    {view.shaded.map(formatDayRange).join(', ')}: Phala Cloud
-                    recomputes past days using each VM's and user's current
-                    status, so running VMs and users are understated for those
-                    days.
-                  </AlertDescription>
-                </Alert>
-              </div>
-            )}
           </Section>
 
           <footer className="px-4 lg:px-6">

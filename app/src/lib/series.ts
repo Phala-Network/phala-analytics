@@ -51,20 +51,6 @@ export const weeklyRewards = (vault: AnalyticsData['vault']): Row[] => {
     }))
 }
 
-/** Consecutive backfilled Cloud days as inclusive [first, last] date ranges. */
-export const backfillRanges = (
-  cloud: AnalyticsData['cloud'],
-): [string, string][] => {
-  const ranges: [string, string][] = []
-  for (const {date, backfilled} of cloud) {
-    if (!backfilled) continue
-    const last = ranges.at(-1)
-    if (last && dayTime(date) - dayTime(last[1]) === DAY_MS) last[1] = date
-    else ranges.push([date, date])
-  }
-  return ranges
-}
-
 /** Latest row with a non-null value for `key`. */
 export const latest = <T, K extends keyof T>(rows: readonly T[], key: K) =>
   rows.findLast((row) => row[key] != null)
