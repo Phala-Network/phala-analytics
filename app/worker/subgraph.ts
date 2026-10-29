@@ -114,7 +114,7 @@ export const wei = (value: unknown): number => {
   if (!Number.isFinite(result)) throw new Error('Token quantity out of range')
   return result
 }
-const count = (value: unknown): number => {
+export const count = (value: unknown): number => {
   const result = finiteNumber(value)
   if (!Number.isSafeInteger(result)) throw new Error('Invalid subgraph count')
   return result

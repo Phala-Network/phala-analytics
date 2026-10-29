@@ -11,19 +11,35 @@ import {
 import {formatCompact, formatDay, formatMonth, formatNumber} from '@/lib/format'
 import {cellValue, type Row, type Series} from '@/lib/series'
 
-/** Text alternative: the range and the latest value of each series. */
+/**
+ * Text alternative: the range and latest actual value of each series, then
+ * where each dashed (projected) series ends.
+ */
 export const summary = (title: string, rows: Row[], series: Series[]) => {
+  const actual = series.filter(({dashed}) => !dashed)
   const first = rows[0]
-  const last = rows.at(-1)
+  const last =
+    rows.findLast((row) =>
+      actual.some(({key}) => cellValue(row, key) != null),
+    ) ?? rows.at(-1)
   if (!first || !last) return `${title}: no data yet.`
-  const latest = series
+  const latest = actual
     .map(({key, label}) => {
       const row = rows.findLast((item) => cellValue(item, key) != null)
       return row ? `${label} ${formatNumber(cellValue(row, key))}` : null
     })
     .filter(Boolean)
     .join(', ')
-  return `${title} chart from ${formatDay(first.date)} to ${formatDay(last.date)}. Latest: ${latest}.`
+  const projected = series
+    .filter(({dashed}) => dashed)
+    .map(({key, label}) => {
+      const row = rows.findLast((item) => cellValue(item, key) != null)
+      return row
+        ? ` ${label} ${formatNumber(cellValue(row, key))} by ${formatDay(row.date)}.`
+        : ''
+    })
+    .join('')
+  return `${title} chart from ${formatDay(first.date)} to ${formatDay(last.date)}. Latest: ${latest}.${projected}`
 }
 
 /**
@@ -51,13 +67,17 @@ export default function ChartArea({
   const colors = Object.fromEntries(
     series.map(({key, color}) => [`--color-${key}`, color]),
   )
-  // Stacks need numbers; whole PHA keep tooltips readable.
+  // Stacks need numbers where a row has the key; rows without it (projected
+  // days) leave a gap. Whole PHA keep tooltips readable.
   const chartData = rows.map((row) => ({
     date: row.date,
     ...Object.fromEntries(
       series.map(({key, stack}) => {
         const value = cellValue(row, key)
-        return [key, value == null ? (stack ? 0 : null) : Math.round(value)]
+        return [
+          key,
+          value == null ? (stack && key in row ? 0 : null) : Math.round(value),
+        ]
       }),
     ),
   }))
@@ -122,13 +142,14 @@ export default function ChartArea({
             />
           }
         />
-        {series.map(({key, stack}) => (
+        {series.map(({key, stack, dashed}) => (
           <Area
             key={key}
             dataKey={key}
             type="linear"
-            fill={`url(#${id}-${key})`}
+            fill={dashed ? 'none' : `url(#${id}-${key})`}
             stroke={`var(--color-${key})`}
+            strokeDasharray={dashed ? '4 4' : undefined}
             stackId={stack ? 'a' : undefined}
             isAnimationActive={false}
           />

@@ -117,7 +117,10 @@ for (const mode of [
             observedBlockNumber: '100', observedBlockTimestamp: String(env.NOW),
             vaultImplementation: '0x' + '1'.repeat(40), vaultImplementationReviewed: env.MODE !== 'unreviewed',
             accrualMode: env.MODE === 'unreviewed' ? 'checkpoint-only' : 'formula',
-          }}})
+            sharePrice: '1.25', apr: '0.05', stakers: '3',
+          }, ...(query.includes('chainState(') ? {chainState: {
+            khalaClaimCount: '1', khalaFree: '${token(2)}', khalaStaked: '0', phalaClaimCount: '0', phalaFree: '0', phalaStaked: '0',
+          }} : {})}})
           if (env.MODE === 'page-redirect') return failure(302)
           if (env.MODE === 'page-server') return failure(503)
           if (!query.includes('first: 1000') || !query.includes('orderBy: date') || !query.includes('orderDirection: asc') || !query.includes('date_gt: $after')) return failure(400)
@@ -186,17 +189,6 @@ for (const mode of [
       (await worker.fetch('https://analytics.test/api/health')).status,
       503,
     )
-    if (mode === 'unreviewed')
-      await db
-        .prepare("INSERT INTO sync_state VALUES ('realtime', ?, ?)")
-        .bind(
-          JSON.stringify({
-            totalCirculation: 100,
-            ethereum: {timestamp: `${today}T07:00:00Z`},
-          }),
-          today,
-        )
-        .run()
     const result = await worker.scheduled({cron: '17 * * * *', scheduledTime})
     const calls: unknown = await (
       await stubs.fetch('https://control.test')
@@ -205,7 +197,13 @@ for (const mode of [
     for (const call of calls) {
       assert.equal(record(call).userAgent, USER_AGENT, 'Outbound User-Agent')
     }
-    const failed = !['ok', 'pagination', 'price-pagination'].includes(mode)
+    // An unreviewed implementation is cached with its flag; health reports it.
+    const failed = ![
+      'ok',
+      'pagination',
+      'price-pagination',
+      'unreviewed',
+    ].includes(mode)
     assert.equal(
       result.outcome,
       failed ? 'exception' : 'ok',
@@ -261,7 +259,11 @@ for (const mode of [
       )
       continue
     }
-    if (failed && mode !== 'unreviewed') {
+    if (failed) {
+      // Without served daily rows the API is unavailable, even with live data.
+      const empty = await worker.fetch('https://analytics.test/api/data')
+      assert.equal(empty.status, 503)
+      assert.equal(empty.headers.get('cache-control'), 'no-store')
       assert.equal(
         checkpoint,
         mode === 'write-fail' ? 'old' : null,
@@ -296,7 +298,33 @@ for (const mode of [
       .run()
     const response = await worker.fetch('https://analytics.test/api/data')
     assert.equal(response.status, 200)
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=60')
     const data = record(await response.json())
+    const projection = record(data.projection)
+    assert.equal(
+      projection.method,
+      mode === 'unreviewed' ? 'trend-claims-only' : 'trend',
+    )
+    assert.ok(Array.isArray(projection.points))
+    assert.deepEqual(projection.points[0], {date: today, total: 107})
+    assert.ok(projection.points.length >= 366)
+    if (mode === 'unreviewed') {
+      // An unreviewed implementation leaves the daily rows in place.
+      assert.equal(data.live, null)
+      assert.deepEqual(data.realtime, {
+        totalCirculation: 107,
+        timestamp: `${today}T00:00:00.000Z`,
+      })
+    } else {
+      const live = record(data.live)
+      assert.equal(live.circulation, 100)
+      assert.equal(live.stakers, 3)
+      assert.deepEqual(data.realtime, {
+        totalCirculation: 100,
+        timestamp: live.timestamp,
+      })
+      assert.equal(record(live.claims).khalaFree, 2)
+    }
     assert.deepEqual(Object.keys(record(data.subgraphs)), ['ethereum'])
     assert.ok(Array.isArray(data.chainCirculation))
     assert.equal(data.chainCirculation.length, mode === 'pagination' ? 1001 : 2)
@@ -484,6 +512,16 @@ for (const mode of [
         assert.ok(Array.isArray(rows))
         return rows.length
       }
+      const beforeData = await requestCount()
+      const again = record(
+        await (await worker.fetch('https://analytics.test/api/data')).json(),
+      )
+      assert.deepEqual(again.live, data.live)
+      assert.equal(
+        await requestCount(),
+        beforeData,
+        'Live data shares the workerd cache',
+      )
       const all = await worker.fetch('https://analytics.test/api/all')
       assert.equal(all.status, 200)
       assert.equal(all.headers.get('access-control-allow-origin'), '*')
@@ -556,5 +594,5 @@ for (const mode of [
   }
 }
 console.log(
-  'workerd: incremental fills, price paging and missing days, idempotency, deployment reloads, rollback, HTTP failures, review flags, R2 export and endpoints verified',
+  'workerd: incremental fills, price paging and missing days, idempotency, deployment reloads, rollback, HTTP failures, review flags, live fallback and cache, R2 export and endpoints verified',
 )

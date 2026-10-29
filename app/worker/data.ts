@@ -41,20 +41,6 @@ export const finiteNumber = (value: unknown): number => {
 export const nullableNumber = (value: unknown) =>
   value == null ? null : finiteNumber(value)
 
-const timestamp = (value: unknown): string => {
-  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))
-    throw new Error('Expected an ISO timestamp')
-  return new Date(value).toISOString()
-}
-
-export const realtimeRow = (value: unknown) => {
-  const row = record(value)
-  return {
-    totalCirculation: finiteNumber(row.totalCirculation),
-    timestamp: timestamp(row.timestamp ?? record(row.ethereum).timestamp),
-  }
-}
-
 export interface CloudRow {
   date: string
   total_users: number
@@ -169,7 +155,9 @@ export const dailyPrices = (pages: unknown[]): Map<string, number> => {
 
 export interface AnalyticsData {
   generatedAt: string
+  /** Live circulation, or the latest daily total at its midnight. */
   realtime: {totalCirculation: number; timestamp: string}
+  live: import('./live').LiveData | null
   subgraphs: {
     ethereum: {
       deployment: string
@@ -200,4 +188,5 @@ export interface AnalyticsData {
     captured: number | null
     backfilled: boolean
   }[]
+  projection: import('./projection').Projection
 }

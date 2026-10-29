@@ -16,7 +16,7 @@ const SNAPSHOT_CACHE_CONTROL = 'public, max-age=3600'
 
 // Only controlled application errors have safe messages; provider and
 // persistence errors can include credentials, so log their class alone.
-const describeError = (error: unknown) => {
+export const describeError = (error: unknown) => {
   if (error instanceof SubgraphError || error instanceof ConfigError) {
     return `${error.name}: ${error.message}`
   }

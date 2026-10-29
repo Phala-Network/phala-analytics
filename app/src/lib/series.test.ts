@@ -1,9 +1,9 @@
 import {expect, test} from 'bun:test'
 import type {AnalyticsData} from '../../worker/data'
-import {vaultDay} from '../../worker/fixtures'
-import {parseDay, VAULT_FIELDS} from '../../worker/subgraph'
+import {claimDay, vaultDay} from '../../worker/fixtures'
+import {CLAIM_FIELDS, parseDay, VAULT_FIELDS} from '../../worker/subgraph'
 import {DAY_MS} from './format'
-import {weeklyRewards} from './series'
+import {claimTotals, toRows, weeklyRewards, withProjection} from './series'
 
 const vault = (flowDates: string[], rewards: number[]) =>
   flowDates.map((flowDate, index) => ({
@@ -44,5 +44,61 @@ test('quiet days count as 0 and a week of quiet days stays a 0 bar', () => {
   expect(rows.map(({date, rewards}) => [date, rewards])).toEqual([
     ['2026-10-19', 5],
     ['2026-10-26', 0],
+  ])
+})
+
+test('live claims are added only when the daily rows run through the previous day', () => {
+  // claimDay(date) holds the flows of the day before: Khala 2 claims, 4 PHA; Phala 1.
+  const claims = [claimDay('2026-10-28'), claimDay('2026-10-29')].map((row) =>
+    parseDay(row, CLAIM_FIELDS),
+  )
+  const live = (flowDate: string) =>
+    ({
+      claims: {
+        flowDate,
+        khalaClaimCount: 1,
+        khalaFree: 10,
+        khalaStaked: 0,
+        phalaClaimCount: 0,
+        phalaFree: 0,
+        phalaStaked: 0,
+      },
+    }) as AnalyticsData['live']
+  expect(claimTotals(claims, live('2026-10-29'))).toEqual({
+    live: true,
+    through: '2026-10-28',
+    count: [5, 2],
+    amount: [18, 0],
+  })
+  // Just after midnight, before the hourly sync stores 2026-10-30 (flows of
+  // 2026-10-29), the live day 2026-10-30 is not adjacent: show daily totals.
+  for (const value of [live('2026-10-30'), live('2026-10-28'), null])
+    expect(claimTotals(claims, value)).toEqual({
+      live: false,
+      through: '2026-10-28',
+      count: [4, 2],
+      amount: [8, 0],
+    })
+  expect(claimTotals([], live('2026-10-29'))).toBeUndefined()
+})
+
+test('projected rows continue from the last actual row without touching it otherwise', () => {
+  const rows = toRows(
+    [
+      {date: '2026-10-28', total: 1},
+      {date: '2026-10-29', total: 2},
+    ],
+    ({total}) => ({total}),
+  )
+  const merged = withProjection(rows, [
+    {date: '2026-10-29', total: 2},
+    {date: '2026-10-30', total: 3},
+  ])
+  expect(
+    merged.map(({date, total, projected}) => [date, total, projected]),
+  ).toEqual([
+    ['2026-10-28', 1, undefined],
+    ['2026-10-29', 2, 2],
+    ['2026-10-30', undefined, 3],
   ])
 })

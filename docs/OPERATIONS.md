@@ -6,6 +6,7 @@
 Ethereum ──> Goldsky phala-ethereum/prod ──> phala-analytics Worker
                                                 ├─> /api/circulation (supply trackers)
                                                 ├─> /api/all, /api/snapshot
+                                                ├─> Latest + ChainState ─> /api/data live block
                                                 └─> ChainDay / VaultDay / ClaimDay ──┐
 Phala Cloud daily stats ───────────────────────────────────────────────────────────┼─> D1 cache ─> dashboard
 DefiLlama PHA price ───────────────────────────────────────────────────────────────┘
@@ -18,7 +19,9 @@ The Ethereum subgraph owns chain-derived state, midnight snapshots, Vault
 accrual and claim events. The circulation API formats its integer wei amounts
 as decimal PHA strings; it does not call RPC or reconstruct historical blocks. The
 `phala-analytics` Cloudflare Worker refreshes a SQLite cache and serves the
-dashboard and JSON APIs. Archived Phala/Khala circulation stays frozen.
+dashboard and JSON APIs. `/api/data` also reads current supply, Vault and
+same-day claim figures from the subgraph on each request, cached for 60 seconds;
+when that read fails it serves the daily rows alone. Archived Phala/Khala circulation stays frozen.
 Cloud observations include values that cannot be reconstructed later;
 weekly `cloud_daily` exports to R2 preserve those observations.
 
@@ -49,15 +52,15 @@ Code and component-specific commands:
 
 ## Consumers
 
-| Consumer                           | Contract                                                                                                                                                      |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| External supply trackers           | `https://pha-circulation-server.vercel.app/api/circulation`, a plain decimal with no newline or JSON wrapper. Individual tracker identities are not recorded. |
-| Analytics current circulation      | `/api/all`; the Phala/Khala objects are zero.                                                                                                                 |
-| Daily API consumers                | `/api/snapshot?date=YYYY-MM-DD`; values at exactly 00:00 UTC, last-observed block metadata.                                                                   |
-| `phala-analytics` Worker           | Direct `ChainDay`, `VaultDay`, `ClaimDay` reads; Phala Cloud daily stats and DefiLlama price (CoinGecko-sourced).                                             |
-| `analytics.phala.network`          | Dashboard and JSON APIs served by the analytics Worker.                                                                                                       |
-| apps claim page                    | `Claimed` (Khala) and `ClaimedAndBridged` (Phala) from `phala-ethereum/prod/gn`; eligibility and transactions use contracts directly.                         |
-| Snapshot space `phala-network.eth` | Separate Phala L2 voting-power API described below.                                                                                                           |
+| Consumer                           | Contract                                                                                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| External supply trackers           | `https://pha-circulation-server.vercel.app/api/circulation`, a plain decimal with no newline or JSON wrapper. Individual tracker identities are not recorded.      |
+| Analytics current circulation      | `/api/all`; the Phala/Khala objects are zero.                                                                                                                      |
+| Daily API consumers                | `/api/snapshot?date=YYYY-MM-DD`; values at exactly 00:00 UTC, last-observed block metadata.                                                                        |
+| `phala-analytics` Worker           | Direct `ChainDay`, `VaultDay`, `ClaimDay` reads, plus `Latest` and `ChainState` for live figures; Phala Cloud daily stats and DefiLlama price (CoinGecko-sourced). |
+| `analytics.phala.network`          | Dashboard and JSON APIs served by the analytics Worker.                                                                                                            |
+| apps claim page                    | `Claimed` (Khala) and `ClaimedAndBridged` (Phala) from `phala-ethereum/prod/gn`; eligibility and transactions use contracts directly.                              |
+| Snapshot space `phala-network.eth` | Separate Phala L2 voting-power API described below.                                                                                                                |
 
 ## Goldsky deployments and limits
 
@@ -162,7 +165,8 @@ secret. Subgraph deploys and tag changes remain manual and must pass the
 [subgraph upgrade gate](#subgraph-upgrade-and-tag).
 
 After a merge, confirm the Workers Build succeeded, then check `/`,
-`/api/health`, `/api/data`, circulation output and browser rendering.
+`/api/health`, `/api/data` (including a non-null `live` block), circulation
+output and browser rendering.
 Changes outside the watch paths do not normally deploy the Worker; run a new
 build when a subgraph tag change needs a fresh circulation cache namespace.
 

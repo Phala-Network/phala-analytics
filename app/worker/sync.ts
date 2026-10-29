@@ -1,5 +1,3 @@
-import {getAllData} from './circulation/circulation'
-import {readConfig} from './circulation/config'
 import {
   captured,
   cloudSource,
@@ -7,7 +5,6 @@ import {
   dailyPrices,
   FIRST_CLOUD_DATE,
   priceUrls,
-  realtimeRow,
   record,
   selectCloudRows,
   shiftDate,
@@ -110,18 +107,6 @@ export const sync = async (env: Env, now: Date, request: Request = fetch) => {
       failures.push(error)
     }
   }
-
-  await attempt('realtime', async () => {
-    const data = await getAllData(readConfig(env), (url, init) =>
-      checkedFetch(url, 'Circulation realtime', init, 8000),
-    )
-    await stateStatement(
-      db,
-      'realtime',
-      JSON.stringify(realtimeRow(data)),
-      now,
-    ).run()
-  })
 
   await attempt('ethereum', async () => {
     const chain = 'ethereum'

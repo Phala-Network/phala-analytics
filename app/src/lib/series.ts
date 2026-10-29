@@ -12,6 +12,8 @@ export type Series = {
   /** Drawn series take a chart color; others appear only in the tooltip and table. */
   color?: string
   stack?: boolean
+  /** Drawn as a dashed line without fill. */
+  dashed?: boolean
 }
 
 export const cellValue = (row: Row, key: string) => {
@@ -25,6 +27,49 @@ export const toRows = <T extends {date: string}>(
   pick: (row: T) => Record<string, number | null>,
 ): Row[] =>
   rows.map((row) => ({date: row.date, time: dayTime(row.date), ...pick(row)}))
+
+/**
+ * Rows followed by projected points under `projected`. The first point is the
+ * last row's date, so the projected line starts at the latest actual total.
+ */
+export const withProjection = (
+  rows: Row[],
+  [start, ...points]: AnalyticsData['projection']['points'],
+): Row[] => [
+  ...rows.map((row) =>
+    start && row.date === start.date ? {...row, projected: start.total} : row,
+  ),
+  ...toRows(points, ({total}) => ({projected: total})),
+]
+
+/**
+ * Sunset claim totals by chain, `[khala, phala]`. The live counts for the
+ * current day are added only when the daily rows run through the day before,
+ * so around midnight no day is skipped or counted twice.
+ */
+export const claimTotals = (
+  claims: AnalyticsData['claims'],
+  live: AnalyticsData['live'],
+) => {
+  const last = claims.at(-1)
+  if (!last) return undefined
+  const today = live?.claims.flowDate === last.date ? live.claims : undefined
+  const rows = today ? [...claims, today] : claims
+  const total = (...keys: Exclude<keyof typeof last, 'date' | 'flowDate'>[]) =>
+    rows.reduce(
+      (sum, row) => keys.reduce((part, key) => part + row[key], sum),
+      0,
+    )
+  return {
+    live: today !== undefined,
+    through: last.flowDate,
+    count: [total('khalaClaimCount'), total('phalaClaimCount')] as const,
+    amount: [
+      total('khalaFree', 'khalaStaked'),
+      total('phalaFree', 'phalaStaked'),
+    ] as const,
+  }
+}
 
 /**
  * Vault rewards summed per ISO week (UTC, Monday to Sunday) of their flow day,
