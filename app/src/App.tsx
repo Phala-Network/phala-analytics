@@ -197,7 +197,7 @@ export function App() {
           <PhalaLogo className="h-6 w-auto" />
           <Separator
             orientation="vertical"
-            className="mx-2 data-[orientation=vertical]:h-4"
+            className="mx-2 data-vertical:h-4 data-vertical:self-auto"
           />
           <h1 className="text-base font-medium">
             <span className="sr-only">Phala </span>Analytics
@@ -239,7 +239,7 @@ export function App() {
                   </AlertTitle>
                   <AlertDescription>
                     <Button variant="outline" size="sm" onClick={retry}>
-                      <RotateCwIcon />
+                      <RotateCwIcon data-icon="inline-start" />
                       Retry
                     </Button>
                   </AlertDescription>
@@ -268,7 +268,7 @@ export function App() {
               series={CIRCULATION}
               headline={
                 <div className="flex flex-col gap-1 pt-2">
-                  <div className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                  <div className="text-2xl font-semibold tabular-nums @[250px]/card-header:text-3xl">
                     {view ? (
                       `${view.circulation} PHA`
                     ) : (
@@ -308,10 +308,10 @@ export function App() {
               </Alert>
             )}
             <div
-              className={`${CARDS} @xl/main:grid-cols-2 @3xl/main:grid-cols-3`}
+              className={`${CARDS} @xl/main:grid-cols-2 @5xl/main:grid-cols-3`}
             >
               <MetricCard
-                className="@xl/main:col-span-2 @3xl/main:col-span-1"
+                className="@xl/main:col-span-2 @5xl/main:col-span-1"
                 label="Total assets"
                 value={view && `${view.vault.totalAssets} PHA`}
                 secondary={view?.vault.vaultAsOf}
@@ -357,7 +357,7 @@ export function App() {
             title="Sunset claims"
             description="PHA claimed on Ethereum by former Khala and Phala chain holders"
           >
-            <div className={`${CARDS} @xl/main:grid-cols-2`}>
+            <div className={`${CARDS} @3xl/main:grid-cols-2`}>
               <MetricCard
                 label="Claims"
                 value={
@@ -391,7 +391,7 @@ export function App() {
 
           <Section id="cloud" title="Phala Cloud">
             <div
-              className={`${CARDS} @xl/main:grid-cols-2 @3xl/main:grid-cols-3 @5xl/main:grid-cols-5`}
+              className={`${CARDS} @xl/main:grid-cols-2 @5xl/main:grid-cols-3 @7xl/main:grid-cols-5`}
             >
               <MetricCard
                 label="Users"
@@ -414,7 +414,7 @@ export function App() {
                 secondary={view?.cloud.vcpu.asOf}
               />
               <MetricCard
-                className="@xl/main:col-span-2 @5xl/main:col-span-1"
+                className="@xl/main:col-span-2 @7xl/main:col-span-1"
                 label="Annual revenue in PHA"
                 value={view && `${view.cloud.captured.value} PHA`}
                 secondary={view?.cloud.captured.asOf}
@@ -477,7 +477,7 @@ export function App() {
           <div>
             <Button variant="outline" size="sm" asChild>
               <a href="/api/data">
-                <DownloadIcon />
+                <DownloadIcon data-icon="inline-start" />
                 Download the data (JSON)
               </a>
             </Button>

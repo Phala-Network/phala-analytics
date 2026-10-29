@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/chart'
 import {formatCompact, formatDay, formatMonth, formatNumber} from '@/lib/format'
 import {cellValue, type Row, type Series} from '@/lib/series'
+import {cn} from '@/lib/utils'
 
 /** Text alternative: the range and the latest value of each series. */
 export const summary = (title: string, rows: Row[], series: Series[]) => {
@@ -43,6 +44,7 @@ export default function ChartArea({
   rows,
   series,
   shaded = [],
+  className,
 }: {
   title: string
   rows: Row[]
@@ -50,6 +52,7 @@ export default function ChartArea({
   series: (Series & {color: string})[]
   /** Inclusive [first, last] UTC days to shade. */
   shaded?: [string, string][]
+  className?: string
 }) {
   const id = useId().replaceAll(':', '')
   const chartConfig = Object.fromEntries(
@@ -74,7 +77,7 @@ export default function ChartArea({
   return (
     <ChartContainer
       config={chartConfig}
-      className="aspect-auto h-[250px] w-full"
+      className={cn('aspect-auto w-full', className)}
       style={colors}
       role="img"
       aria-label={summary(title, rows, series)}
