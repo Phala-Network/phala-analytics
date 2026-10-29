@@ -54,7 +54,7 @@ for (const mode of [
           r2Buckets: {BACKUP: 'backup-test'},
           bindings: {
             PHALA_CLOUD_API_KEY: 'test-cloud-key',
-            CIRCULATION_API_URL: 'https://circulation.test',
+            VERSION: {id: 'test-v1'},
             GOLDSKY_ETHEREUM_URL: 'https://ethereum.test',
           },
           outboundService: 'upstream-stubs',
@@ -69,6 +69,7 @@ for (const mode of [
               dailyCloud(shiftDate(firstCloud, i)),
             ),
             DATE: today,
+            NOW: Math.floor(Date.now() / 1000),
             ETHEREUM: ethereum,
             VAULT: [vaultDay(yesterday), vaultDay(today)],
             CLAIM: [claimDay(yesterday), claimDay(today)],
@@ -87,7 +88,6 @@ for (const mode of [
           const failure = (status) => new Response('Upstream failed', {status, headers: {Location: 'https://not-followed.test/'}})
           if (env.MODE === 'redirect') return failure(302)
           if (env.MODE === 'server') return failure(503)
-          if (url.pathname === '/api/all') return Response.json({totalCirculation: '107', ethereum: {timestamp: env.DATE + 'T07:00:00Z'}})
           if (url.pathname === '/api/v1/stats/daily') {
             if (request.headers.get('Authorization') !== 'Bearer test-cloud-key') return failure(401)
             return Response.json({data: env.CLOUD})
@@ -108,9 +108,13 @@ for (const mode of [
           const {query, variables} = JSON.parse(body)
           if (env.MODE === 'graphql-errors') return Response.json({errors: [{message: 'not leaked'}]})
           const changed = generation > 0
-          const _meta = {deployment: chain + (changed ? '-v2' : '-v1'), hasIndexingErrors: env.MODE === 'indexing-errors'}
-          if (query.includes('latest(')) return Response.json({data: {_meta, latest: {
-            chain, timestamp: String(Date.parse(env.DATE + 'T07:00:00Z') / 1000),
+          const _meta = {deployment: chain + (changed ? '-v2' : '-v1'), block: {number: 100}, hasIndexingErrors: env.MODE === 'indexing-errors'}
+          if (query.includes('latest(')) return Response.json({data: {_meta, ...(variables?.date ? {chainDay: {
+            ...env.ETHEREUM.at(-1), timestamp: String(Date.parse(variables.date + 'T00:00:00Z') / 1000),
+            observedBlockNumber: '100', observedBlockTimestamp: String(Date.parse(variables.date + 'T00:00:00Z') / 1000 - 12),
+          }} : {}), latest: {
+            ...env.ETHEREUM.at(-1), chain, timestamp: String(env.NOW),
+            observedBlockNumber: '100', observedBlockTimestamp: String(env.NOW),
             vaultImplementation: '0x' + '1'.repeat(40), vaultImplementationReviewed: env.MODE !== 'unreviewed',
             accrualMode: env.MODE === 'unreviewed' ? 'checkpoint-only' : 'formula',
           }}})
@@ -182,6 +186,17 @@ for (const mode of [
       (await worker.fetch('https://analytics.test/api/health')).status,
       503,
     )
+    if (mode === 'unreviewed')
+      await db
+        .prepare("INSERT INTO sync_state VALUES ('realtime', ?, ?)")
+        .bind(
+          JSON.stringify({
+            totalCirculation: 100,
+            ethereum: {timestamp: `${today}T07:00:00Z`},
+          }),
+          today,
+        )
+        .run()
     const result = await worker.scheduled({cron: '17 * * * *', scheduledTime})
     const calls: unknown = await (
       await stubs.fetch('https://control.test')
@@ -190,12 +205,7 @@ for (const mode of [
     for (const call of calls) {
       assert.equal(record(call).userAgent, USER_AGENT, 'Outbound User-Agent')
     }
-    const failed = ![
-      'ok',
-      'pagination',
-      'price-pagination',
-      'unreviewed',
-    ].includes(mode)
+    const failed = !['ok', 'pagination', 'price-pagination'].includes(mode)
     assert.equal(
       result.outcome,
       failed ? 'exception' : 'ok',
@@ -251,7 +261,7 @@ for (const mode of [
       )
       continue
     }
-    if (failed) {
+    if (failed && mode !== 'unreviewed') {
       assert.equal(
         checkpoint,
         mode === 'write-fail' ? 'old' : null,
@@ -323,7 +333,16 @@ for (const mode of [
       (await worker.fetch('https://analytics.test/api/health')).status,
       mode === 'unreviewed' ? 503 : 200,
     )
-    if (mode === 'unreviewed') continue
+    if (mode === 'unreviewed') {
+      const unavailable = await worker.fetch('https://analytics.test/api/all')
+      assert.equal(unavailable.status, 503)
+      assert.equal(unavailable.headers.get('cache-control'), 'no-store')
+      assert.equal(
+        await unavailable.text(),
+        '{"error":"circulation_unavailable"}',
+      )
+      continue
+    }
     if (mode === 'pagination') {
       assert.equal(
         await db
@@ -464,6 +483,78 @@ for (const mode of [
         .results,
     )
     assert.equal(object.httpMetadata?.contentType, 'application/json')
+    if (mode === 'ok') {
+      const requestCount = async () => {
+        const rows: unknown = await (
+          await stubs.fetch('https://control.test')
+        ).json()
+        assert.ok(Array.isArray(rows))
+        return rows.length
+      }
+      const all = await worker.fetch('https://analytics.test/api/all')
+      assert.equal(all.status, 200)
+      assert.equal(all.headers.get('access-control-allow-origin'), '*')
+      assert.equal(all.headers.get('cache-control'), 'public, max-age=60')
+      const body = record(await all.json())
+      const afterAll = await requestCount()
+      const supply = await worker.fetch(
+        'https://analytics.test/api/circulation?ignored=true',
+      )
+      assert.equal(await supply.text(), body.totalCirculation)
+      assert.equal(
+        await requestCount(),
+        afterAll,
+        'Latest requests share the workerd cache',
+      )
+      const snapshot = await worker.fetch(
+        `https://analytics.test/api/snapshot?date=${yesterday}`,
+      )
+      assert.equal(snapshot.status, 200)
+      assert.equal(
+        snapshot.headers.get('cache-control'),
+        'public, max-age=3600',
+      )
+      const afterSnapshot = await requestCount()
+      const cached = await worker.fetch(
+        `https://analytics.test/api/snapshot?date=${yesterday}&ignored=true`,
+      )
+      assert.equal(await cached.text(), await snapshot.text())
+      assert.equal(
+        await requestCount(),
+        afterSnapshot,
+        'Snapshot query strings do not bypass the workerd cache',
+      )
+      const preflight = await worker.fetch('https://analytics.test/api/all', {
+        method: 'OPTIONS',
+        headers: {'Access-Control-Request-Headers': 'X-Example'},
+      })
+      assert.equal(preflight.status, 204)
+      assert.equal(
+        preflight.headers.get('cache-control'),
+        'public, max-age=0, must-revalidate',
+      )
+      assert.equal(
+        preflight.headers.get('access-control-allow-headers'),
+        'X-Example',
+      )
+      assert.equal(
+        (
+          await worker.fetch('https://analytics.test/api/data', {
+            method: 'OPTIONS',
+          })
+        ).status,
+        405,
+      )
+      const unknown = await worker.fetch('https://analytics.test/api/unknown')
+      assert.equal(unknown.status, 404)
+      assert.equal(await unknown.text(), '404 Not Found')
+      const head = await worker.fetch(
+        'https://analytics.test/api/circulation',
+        {method: 'HEAD'},
+      )
+      assert.equal(head.status, 200)
+      assert.equal(await head.text(), '')
+    }
     const version = object.version
     await worker.scheduled({cron: '17 * * * *', scheduledTime: sunday})
     assert.equal((await bucket.head(key))?.version, version)

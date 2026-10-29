@@ -18,9 +18,7 @@ export default defineConfig(({mode}) => ({
       GOLDSKY_ETHEREUM_URL: bindings.text(
         'https://api.goldsky.com/api/public/project_cmdgxxcewrqdi01wx9e7md0ek/subgraphs/phala-ethereum/prod/gn',
       ),
-      CIRCULATION_API_URL: bindings.text(
-        'https://pha-circulation-server.vercel.app',
-      ),
+      VERSION: bindings.versionMetadata(),
     },
     triggers: [triggers.scheduled({schedule: '17 * * * *'})],
   },

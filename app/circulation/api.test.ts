@@ -9,10 +9,12 @@ import {
   test,
 } from 'bun:test'
 import {readFileSync} from 'node:fs'
-import {getCache, getEnv} from '@vercel/functions'
-import app from '../api/index.js'
+import type {getAllData} from './circulation'
 import {readConfig} from './config.js'
+import {createCirculationApi} from './index.js'
+import type {getSnapshot} from './snapshot'
 import {readSubgraph} from './subgraph.js'
+import {memoryCache} from './test-cache.js'
 
 interface RecordedResponse {
   path: string
@@ -24,10 +26,7 @@ interface RecordedResponse {
 }
 const production: {recordedAt: string; responses: RecordedResponse[]} =
   JSON.parse(
-    readFileSync(
-      new URL('./fixtures/production.json', import.meta.url),
-      'utf8',
-    ),
+    readFileSync(`${import.meta.dir}/fixtures/production.json`, 'utf8'),
   )
 const recorded = (path: string) => {
   const result = production.responses.find((row) => row.path === path)
@@ -42,14 +41,22 @@ const config = {
   ethereumUrl: 'https://ethereum.test/gn',
   timeoutMs: 50,
 }
-const cache = getCache({namespace: getEnv().VERCEL_DEPLOYMENT_ID ?? 'local'})
+const cache = memoryCache()
+let app = createCirculationApi(cache, 'test')
+const request = (path: string) =>
+  app.request(path, undefined, {GOLDSKY_ETHEREUM_URL: config.ethereumUrl})
 const fetchSpy = spyOn(globalThis, 'fetch')
+const mockFetch = (
+  implementation: (
+    ...args: Parameters<typeof fetch>
+  ) => ReturnType<typeof fetch>,
+) =>
+  fetchSpy.mockImplementation(
+    Object.assign(implementation, {preconnect: fetch.preconnect}),
+  )
 const logSpy = spyOn(console, 'error')
-const ethereumEnvKey = 'GOLDSKY_ETHEREUM_URL'
-const originalEthereumUrl = process.env[ethereumEnvKey]
-const latestCacheControl =
-  'public, max-age=60, s-maxage=60, stale-while-revalidate=60'
-const snapshotCacheControl = 'public, max-age=3600, s-maxage=86400'
+const latestCacheControl = 'public, max-age=60'
+const snapshotCacheControl = 'public, max-age=3600'
 const snapshotPaths = production.responses
   .filter((row) => row.path.startsWith('/api/snapshot') && row.status === 200)
   .map((row) => row.path)
@@ -125,7 +132,7 @@ interface GraphData {
 }
 const requests: {url: string; date?: string; query: string}[] = []
 const respond = (mutate?: (data: GraphData) => void) => {
-  fetchSpy.mockImplementation(async (input, init) => {
+  mockFetch(async (input, init) => {
     const url = String(input)
     if (url !== config.ethereumUrl) throw new Error('Unexpected upstream URL')
     if (typeof init?.body !== 'string') throw new Error('Expected GraphQL body')
@@ -146,15 +153,8 @@ const respond = (mutate?: (data: GraphData) => void) => {
 
 beforeEach(async () => {
   setSystemTime(new Date(production.recordedAt))
-  Object.assign(process.env, {
-    GOLDSKY_ETHEREUM_URL: config.ethereumUrl,
-  })
-  await Promise.all([
-    cache.delete('latest'),
-    ...snapshotPaths.map((path) =>
-      cache.delete(`snapshot:${path.split('=')[1]}`),
-    ),
-  ])
+  cache.clear()
+  app = createCirculationApi(cache, 'test')
   requests.length = 0
   fetchSpy.mockReset()
   logSpy.mockImplementation(() => {})
@@ -163,8 +163,6 @@ beforeEach(async () => {
 afterEach(() => {
   setSystemTime()
   fetchSpy.mockReset()
-  if (originalEthereumUrl === undefined) delete process.env[ethereumEnvKey]
-  else process.env[ethereumEnvKey] = originalEthereumUrl
 })
 afterAll(() => {
   fetchSpy.mockRestore()
@@ -190,20 +188,20 @@ const checkHeaders = (response: Response, reference: RecordedResponse) => {
 describe('recorded production contracts', () => {
   test('supply tracker keeps plain-number formatting and includes Portal escrow; latest requests share the cache', async () => {
     const reference = recorded('/api/circulation')
-    const response = await app.request(reference.path)
+    const response = await request(reference.path)
     checkHeaders(response, reference)
     expect(response.headers.get('cache-control')).toBe(latestCacheControl)
     expect(await response.text()).toBe('858569518.416145188511')
-    await app.request('/api/all?cache-bust=ignored')
+    await request('/api/all?cache-bust=ignored')
     expect(requests).toHaveLength(1)
     expect(requests[0]?.url).toBe(config.ethereumUrl)
   })
 
   test('all keys/types match apart from null Base and the approved source metadata replacement', async () => {
-    const response = await app.request('/api/all')
+    const response = await request('/api/all')
     checkHeaders(response, recorded('/api/all'))
     expect(response.headers.get('cache-control')).toBe(latestCacheControl)
-    const actual = await response.json()
+    const actual = await response.json<Awaited<ReturnType<typeof getAllData>>>()
     const expected = JSON.parse(recorded('/api/all').body)
     expect(actual.sources.ethereum.indexedAt).toBe(actual.ethereum.timestamp)
     expect(actual.sources.ethereum.lagSeconds).toBe('10')
@@ -211,8 +209,8 @@ describe('recorded production contracts', () => {
     expect(actual.sources.base).toBeNull()
     expected.base = null
     expected.sources.base = null
-    delete actual.sources.ethereum.indexedAt
-    delete actual.sources.ethereum.lagSeconds
+    expected.sources.ethereum.indexedAt = ''
+    expected.sources.ethereum.lagSeconds = ''
     delete expected.sources.ethereum.headBlockNumber
     delete expected.sources.ethereum.lagBlocks
     expect(shape(actual)).toEqual(shape(expected))
@@ -226,10 +224,11 @@ describe('recorded production contracts', () => {
   test.each(snapshotPaths)(
     'snapshot shape and headers match %s',
     async (path) => {
-      const response = await app.request(path)
+      const response = await request(path)
       checkHeaders(response, recorded(path))
       expect(response.headers.get('cache-control')).toBe(snapshotCacheControl)
-      const actual = await response.json()
+      const actual =
+        await response.json<Awaited<ReturnType<typeof getSnapshot>>>()
       const expected = JSON.parse(recorded(path).body)
       expected.base = null
       expect(shape(actual)).toEqual(shape(expected))
@@ -261,7 +260,7 @@ describe('recorded production contracts', () => {
       expect(actual.base).toBeNull()
       expect(requests).toHaveLength(1)
       expect(requests.every((row) => row.date === date)).toBe(true)
-      await app.request(`${path}&cache-bust=ignored`)
+      await request(`${path}&cache-bust=ignored`)
       expect(requests).toHaveLength(1)
     },
   )
@@ -274,7 +273,7 @@ describe('recorded production contracts', () => {
   ])(
     'preserves recorded error response %s without upstream calls',
     async (path) => {
-      const response = await app.request(path)
+      const response = await request(path)
       checkHeaders(response, recorded(path))
       expect(await response.text()).toBe(recorded(path).body)
       if (path.startsWith('/api/snapshot')) {
@@ -323,7 +322,7 @@ describe('subgraph failures', () => {
       `${label}: %s returns uncached 503 and can recover`,
       async (path) => {
         respond(mutate)
-        const response = await app.request(path)
+        const response = await request(path)
         expect(response.status).toBe(503)
         expect(response.headers.get('cache-control')).toBe('no-store')
         expect(response.headers.get('access-control-allow-origin')).toBe('*')
@@ -338,7 +337,7 @@ describe('subgraph failures', () => {
               : '{"error":"snapshot_unavailable"}',
         )
         respond()
-        expect((await app.request(path)).status).toBe(200)
+        expect((await request(path)).status).toBe(200)
       },
     )
   }
@@ -360,15 +359,15 @@ test('daily implementation flag, missing row, and mismatched date are handled sa
   respond((data) => {
     if (data.chainDay) data.chainDay.vaultImplementationReviewed = false
   })
-  expect((await app.request(path)).status).toBe(503)
+  expect((await request(path)).status).toBe(503)
   respond((data) => {
     if (data.chainDay) data.chainDay.timestamp = '0'
   })
-  expect((await app.request(path)).status).toBe(503)
+  expect((await request(path)).status).toBe(503)
   respond((data) => {
     data.chainDay = null
   })
-  const response = await app.request(path)
+  const response = await request(path)
   expect(response.status).toBe(404)
   expect(response.headers.get('cache-control')).toBe('no-store')
 })
@@ -381,8 +380,8 @@ test('merges the two Khala bridges and preserves signed Vault rewards', async ()
       data.latest.vaultReward = toWei('-1.5')
     }
   })
-  const response = await app.request('/api/all')
-  const result = await response.json()
+  const response = await request('/api/all')
+  const result = await response.json<Awaited<ReturnType<typeof getAllData>>>()
   expect(result.ethereum.khalaChainBridge).toBe('5')
   expect(result.ethereum.vaultReward).toBe('-1.5')
 })
@@ -398,7 +397,7 @@ test.each([
   respond((data) => {
     if (data.latest) data.latest[field] = value
   })
-  expect((await app.request('/api/all')).status).toBe(503)
+  expect((await request('/api/all')).status).toBe(503)
 })
 
 for (const path of endpoints) {
@@ -416,8 +415,8 @@ for (const path of endpoints) {
       },
     ]
     for (const failure of failures) {
-      fetchSpy.mockImplementation(failure)
-      const response = await app.request(path)
+      mockFetch(failure)
+      const response = await request(path)
       expect(response.status).toBe(503)
       expect(response.headers.get('cache-control')).toBe('no-store')
       expect(await response.text()).not.toContain('secret-provider-url')

@@ -1,0 +1,350 @@
+{
+  "url": "https://pha-circulation-server.vercel.app",
+  "recordedAt": "2026-10-28T23:58:18.683Z",
+  "responses": [
+    {
+      "path": "/api/all",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=60",
+      "cors": "*",
+      "body": "{\"phala\":{\"circulation\":\"0\",\"crowdloan\":\"0\",\"reward\":\"0\",\"sygmaBridge\":\"0\",\"timestamp\":\"2026-10-28T23:56:36.464Z\",\"totalIssuance\":\"0\"},\"khala\":{\"circulation\":\"0\",\"crowdloan\":\"0\",\"reward\":\"0\",\"sygmaBridge\":\"0\",\"timestamp\":\"2026-10-28T23:56:36.464Z\",\"totalIssuance\":\"0\"},\"ethereum\":{\"circulation\":\"858632235.820319993198989765\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"reward\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1124739.00595322\",\"timestamp\":\"2026-10-28T23:54:11.000000Z\",\"totalSupply\":\"1000000000\",\"vaultReward\":\"2356878.839143907579543768\"},\"base\":null,\"totalCirculation\":\"858632235.820319993198\",\"sources\":{\"ethereum\":{\"blockNumber\":\"26294650\",\"indexedAt\":\"2026-10-28T23:54:11.000000Z\",\"lagSeconds\":\"145\",\"vaultUnstakeLocked\":\"13878016.622047324311395053\"},\"base\":null}}"
+    },
+    {
+      "path": "/api/circulation",
+      "status": 200,
+      "contentType": "text/plain; charset=UTF-8",
+      "cacheControl": "public, max-age=60",
+      "cors": "*",
+      "body": "858632235.820319993198"
+    },
+    {
+      "path": "/api/snapshot?date=2020-04-30",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2020-04-30T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"0\",\"timestamp\":\"1970-01-01T00:00:00.000000Z\",\"circulation\":\"0\",\"totalSupply\":\"0\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"0\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2020-05-01",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2020-05-01T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"9975568\",\"timestamp\":\"2020-04-30T18:36:25.000000Z\",\"circulation\":\"1000000000\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"1000000000\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2020-08-30",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2020-08-30T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"9975568\",\"timestamp\":\"2020-04-30T18:36:25.000000Z\",\"circulation\":\"1000000000\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"1000000000\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2020-08-31",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2020-08-31T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"9975568\",\"timestamp\":\"2020-04-30T18:36:25.000000Z\",\"circulation\":\"1000000000\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"1000000000\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2020-09-01",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2020-09-01T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"10768150\",\"timestamp\":\"2020-08-31T10:29:36.000000Z\",\"circulation\":\"300000000\",\"totalSupply\":\"1000000000\",\"reward\":\"700000000\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"300000000\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2020-09-02",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2020-09-02T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"10768150\",\"timestamp\":\"2020-08-31T10:29:36.000000Z\",\"circulation\":\"300000000\",\"totalSupply\":\"1000000000\",\"reward\":\"700000000\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"300000000\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2020-09-03",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2020-09-03T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"10768150\",\"timestamp\":\"2020-08-31T10:29:36.000000Z\",\"circulation\":\"300000000\",\"totalSupply\":\"1000000000\",\"reward\":\"700000000\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"300000000\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2021-02-08",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2021-02-08T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"10768150\",\"timestamp\":\"2020-08-31T10:29:36.000000Z\",\"circulation\":\"300000000\",\"totalSupply\":\"1000000000\",\"reward\":\"700000000\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"300000000\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2021-12-31",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2021-12-31T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"13907586\",\"timestamp\":\"2021-12-30T15:56:38.000000Z\",\"circulation\":\"216571028.499427635724846\",\"totalSupply\":\"1000000000\",\"reward\":\"690000000\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"93428971.500572364275154\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"216571028.499427635724\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2022-01-01",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2022-01-01T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"13911999\",\"timestamp\":\"2021-12-31T08:11:06.000000Z\",\"circulation\":\"216590750.499427635724846\",\"totalSupply\":\"1000000000\",\"reward\":\"690000000\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"93409249.500572364275154\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"216590750.499427635724\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2022-12-31",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2022-12-31T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"16298534\",\"timestamp\":\"2022-12-30T15:39:11.000000Z\",\"circulation\":\"163047464.540701991350179303\",\"totalSupply\":\"1000000000\",\"reward\":\"463200000\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"33225678.948303631726324516\",\"khalaChainBridge\":\"340526856.510994376923496181\",\"sygmaBridge\":\"0\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"163047464.54070199135\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2023-08-09",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2023-08-09T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"17872831\",\"timestamp\":\"2023-08-08T21:18:35.000000Z\",\"circulation\":\"160867119.010010689231598638\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"381159407.175938932488338681\",\"khalaChainBridge\":\"451690075.491801917317062681\",\"sygmaBridge\":\"6283398.322248460963\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"160867119.010010689231\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2023-12-31",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2023-12-31T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"18891182\",\"timestamp\":\"2023-12-29T12:17:23.000000Z\",\"circulation\":\"210964351.981578194463308677\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"789035648.018421805536691323\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"210964351.981578194463\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2024-04-03",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2024-04-03T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"19569502\",\"timestamp\":\"2024-04-02T17:10:47.000000Z\",\"circulation\":\"254472673.099150801900593693\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"745527326.900849198099406307\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"254472673.0991508019\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2024-04-04",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2024-04-04T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"19573608\",\"timestamp\":\"2024-04-03T06:57:35.000000Z\",\"circulation\":\"254599840.099150801900593693\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"745400159.900849198099406307\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"254599840.0991508019\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2024-04-05",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2024-04-05T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"19585767\",\"timestamp\":\"2024-04-04T23:47:35.000000Z\",\"circulation\":\"255933022.034017847300593693\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"744066977.965982152699406307\",\"portalBridge\":\"0\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"255933022.0340178473\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2024-12-11",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2024-12-11T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"21375111\",\"timestamp\":\"2024-12-10T22:32:59.000000Z\",\"circulation\":\"330585581.04589381027546314\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"669414418.95410618972453686\",\"portalBridge\":\"789841.63152715\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"330585581.045893810275\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2024-12-12",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2024-12-12T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"21381644\",\"timestamp\":\"2024-12-11T20:27:11.000000Z\",\"circulation\":\"344864472.78904539529546314\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"655135527.21095460470453686\",\"portalBridge\":\"789841.63152715\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"344864472.789045395295\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2025-01-09",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2025-01-09T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"21582563\",\"timestamp\":\"2025-01-08T21:51:47.000000Z\",\"circulation\":\"456269069.197634018718279686\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"543730930.802365981281720314\",\"portalBridge\":\"810112.17986632\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"456269069.197634018718\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2025-01-10",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2025-01-10T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"21590159\",\"timestamp\":\"2025-01-09T23:19:23.000000Z\",\"circulation\":\"458385586.574876441100085696\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"541614413.425123558899914304\",\"portalBridge\":\"810112.17986632\",\"vaultReward\":\"0\",\"vaultUnstakeLocked\":\"0\"},\"base\":null,\"totalCirculation\":\"458385586.5748764411\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2025-06-01",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2025-06-01T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"22606055\",\"timestamp\":\"2025-05-31T23:42:35.000000Z\",\"circulation\":\"615025837.837930555678538053\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"0\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"381476276.70538309426353856\",\"portalBridge\":\"889139.23663535\",\"vaultReward\":\"3497885.456686350057923387\",\"vaultUnstakeLocked\":\"1581317.829781314451434776\"},\"base\":null,\"totalCirculation\":\"615025837.837930555678\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2025-12-31",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2025-12-31T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"24128623\",\"timestamp\":\"2025-12-30T23:07:35.000000Z\",\"circulation\":\"822103639.352045798091614765\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"165496348.289816397844466467\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1123793.76705484\",\"vaultReward\":\"12400012.358137804063918768\",\"vaultUnstakeLocked\":\"7899382.900932210480940062\"},\"base\":null,\"totalCirculation\":\"822103639.352045798091\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-01-01",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2026-01-01T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"24134995\",\"timestamp\":\"2025-12-31T20:27:47.000000Z\",\"circulation\":\"822151693.551264548091614765\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"165496348.289816397844466467\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1127559.02368171\",\"vaultReward\":\"12351958.158919054063918768\",\"vaultUnstakeLocked\":\"8500283.166542825544169464\"},\"base\":null,\"totalCirculation\":\"822151693.551264548091\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-09-22",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2026-09-22T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"26028740\",\"timestamp\":\"2026-09-21T22:04:23.000000Z\",\"circulation\":\"848844348.717044846714614765\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"148808577.400536099221466467\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1123536.38966228\",\"vaultReward\":\"2347073.882419054063918768\",\"vaultUnstakeLocked\":\"5984876.079718339291949075\"},\"base\":null,\"totalCirculation\":\"848844348.717044846714\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-09-23",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2026-09-23T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"26033752\",\"timestamp\":\"2026-09-22T14:53:47.000000Z\",\"circulation\":\"848892402.916263596714614765\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"148808577.400536099221466467\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1123536.38966228\",\"vaultReward\":\"2299019.683200304063918768\",\"vaultUnstakeLocked\":\"8805845.216263805169874861\"},\"base\":null,\"totalCirculation\":\"848892402.916263596714\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-10-26",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2026-10-26T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"26271878\",\"timestamp\":\"2026-10-25T19:47:23.000000Z\",\"circulation\":\"858488267.330482346714614765\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"139010885.340536099221466467\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1124728.66139266\",\"vaultReward\":\"2500847.328981554063918768\",\"vaultUnstakeLocked\":\"13914165.782472522112475295\"},\"base\":null,\"totalCirculation\":\"858488267.330482346714\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-10-27",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2026-10-27T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"26279601\",\"timestamp\":\"2026-10-26T21:37:35.000000Z\",\"circulation\":\"858536321.529701096714614765\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"139010885.340536099221466467\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1124728.66139266\",\"vaultReward\":\"2452793.129762804063918768\",\"vaultUnstakeLocked\":\"13879097.252736818626728772\"},\"base\":null,\"totalCirculation\":\"858536321.529701096714\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-10-28",
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "public, max-age=3600",
+      "cors": "*",
+      "body": "{\"date\":\"2026-10-28T00:00:00.000000Z\",\"ethereum\":{\"blockNumber\":\"26287475\",\"timestamp\":\"2026-10-27T23:55:59.000000Z\",\"circulation\":\"858584375.728919846714614765\",\"totalSupply\":\"1000000000\",\"reward\":\"0\",\"sunsetReward\":\"139010885.340536099221466467\",\"phalaChainBridge\":\"0\",\"khalaChainBridge\":\"0\",\"sygmaBridge\":\"0\",\"portalBridge\":\"1124728.66139266\",\"vaultReward\":\"2404738.930544054063918768\",\"vaultUnstakeLocked\":\"13906259.662134426335168993\"},\"base\":null,\"totalCirculation\":\"858584375.728919846714\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2020-04-29",
+      "status": 404,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "no-store",
+      "cors": "*",
+      "body": "{\"error\":\"not_available\",\"message\":\"date must be between 2020-04-30 and today\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-10-29",
+      "status": 404,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "no-store",
+      "cors": "*",
+      "body": "{\"error\":\"not_available\",\"message\":\"date must be between 2020-04-30 and today\"}"
+    },
+    {
+      "path": "/api/snapshot?date=",
+      "status": 400,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "no-store",
+      "cors": "*",
+      "body": "{\"error\":\"invalid_date\",\"message\":\"date must be YYYY-MM-DD\"}"
+    },
+    {
+      "path": "/api/snapshot?date=invalid",
+      "status": 400,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "no-store",
+      "cors": "*",
+      "body": "{\"error\":\"invalid_date\",\"message\":\"date must be YYYY-MM-DD\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-02-30",
+      "status": 400,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "no-store",
+      "cors": "*",
+      "body": "{\"error\":\"invalid_date\",\"message\":\"date is not a valid calendar date\"}"
+    },
+    {
+      "path": "/api/snapshot?date=2026-1-01",
+      "status": 400,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "no-store",
+      "cors": "*",
+      "body": "{\"error\":\"invalid_date\",\"message\":\"date must be YYYY-MM-DD\"}"
+    },
+    {
+      "path": "/api/snapshot",
+      "status": 400,
+      "contentType": "application/json; charset=UTF-8",
+      "cacheControl": "no-store",
+      "cors": "*",
+      "body": "{\"error\":\"invalid_date\",\"message\":\"date must be YYYY-MM-DD\"}"
+    },
+    {
+      "path": "/api",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "cors": "*",
+      "body": "404 Not Found"
+    },
+    {
+      "path": "/api/",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "cors": "*",
+      "body": "404 Not Found"
+    },
+    {
+      "path": "/api/unknown",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "cors": "*",
+      "body": "404 Not Found"
+    },
+    {
+      "path": "/api/circulation/",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "cors": "*",
+      "body": "404 Not Found"
+    },
+    {
+      "path": "/api/all/",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "cors": "*",
+      "body": "404 Not Found"
+    },
+    {
+      "path": "/api/snapshot/",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "cors": "*",
+      "body": "404 Not Found"
+    }
+  ]
+}
