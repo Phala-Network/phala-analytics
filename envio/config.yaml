@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: phala-analytics-envio
+description: Phala Ethereum circulation, Vault metrics and sunset claims (HyperIndex port of the phala-ethereum subgraph)
+# Single chain; ids stay exactly as in the subgraph.
+disable_default_cross_chain: true
+# Event params arrive lowercase, matching graph-node's Bytes/Address hex output.
+address_format: lowercase
+contracts:
+  - name: Token
+    abi_file_path: ./abis/Token.json
+    events:
+      - event: Transfer(address indexed from, address indexed to, uint256 value)
+  - name: Vault
+    abi_file_path: ./abis/Vault.json
+    events:
+      - event: Approval(address indexed owner, address indexed spender, uint256 value)
+      - event: Claimed(address indexed caller, address indexed receiver, address indexed owner, uint256 assets)
+      - event: Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)
+      - event: Initialized(uint64 version)
+      - event: MaxUnlockRequestsUpdated(uint256 oldMaxUnlockRequests, uint256 newMaxUnlockRequests)
+      - event: OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+      - event: Paused(address account)
+      - event: RewardRateUpdated(uint256 oldRewardRate, uint256 newRewardRate)
+      - event: RewardsSettled(uint256 checkpointTime, uint256 rewards, uint256 totalAssets)
+      - event: Transfer(address indexed from, address indexed to, uint256 value)
+      - event: TreasuryAssetsClaimed(address indexed receiver, uint256 assets)
+      - event: TreasuryRatioUpdated(uint256 oldTreasuryRatio, uint256 newTreasuryRatio)
+      - event: TreasurySettled(uint256 checkpointTime, uint256 treasuryRewards, uint256 treasuryAssets)
+      - event: UnlockPeriodUpdated(uint256 oldUnlockPeriod, uint256 newUnlockPeriod)
+      - event: Unpaused(address account)
+      - event: Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)
+      - event: Upgraded(address indexed implementation)
+  - name: KhalaClaimer
+    abi_file_path: ./abis/KhalaClaimer.json
+    events:
+      - event: Claimed(address indexed user, uint256 free, uint256 staked, address receiver)
+  - name: PhalaClaimer
+    abi_file_path: ./abis/PhalaClaimer.json
+    events:
+      - event: ClaimedAndBridged(address indexed user, uint256 free, uint256 staked, address l1Receiver, address l2Receiver)
+chains:
+  - id: 1 # Ethereum mainnet
+    start_block: 9975568 # PHA deployment
+    end_block: ${ENVIO_END_BLOCK:-}
+    contracts:
+      - name: Token
+        address: "0x6c5ba91642f10282b576d91922ae6448c9d52f4e"
+        start_block: 9975568
+      - name: Vault
+        address: "0x21d6ec8fc14caacc55afa23cba66798dab3a0ec0"
+        start_block: 21596326
+      - name: KhalaClaimer
+        address: "0xa139f849000c5438855032ebfeed9ee104023a73"
+        start_block: 21596400
+      - name: PhalaClaimer
+        address: "0x8b6d7ab0be8d1f6ae40738c4cff75134110a777f"
+        start_block: 21596400
