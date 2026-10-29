@@ -144,8 +144,9 @@ template's `ThemeProvider`. Recharts loads as a separate chunk, so figures and
 skeletons render first. Every chart has a data table.
 
 Dates are UTC days and numbers use `Intl`. Circulation is stacked by chain.
-Daily rewards are plotted on their `flowDate` as a trailing 7-day mean, which
-stays empty until seven consecutive days exist; the table lists each day.
+Vault rewards are summed per ISO week (Monday to Sunday UTC) of their
+`flowDate` and drawn as bars. The latest week appears once its Sunday has a
+row; the data table lists each day, including the current week.
 Sunset claims are shown as totals. APR is hidden while the latest Vault row is
 unreviewed. Backfilled Cloud days are shaded in the Users and VMs charts.
 

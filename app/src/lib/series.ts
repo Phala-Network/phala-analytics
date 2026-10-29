@@ -27,31 +27,28 @@ export const toRows = <T extends {date: string}>(
   rows.map((row) => ({date: row.date, time: dayTime(row.date), ...pick(row)}))
 
 /**
- * Daily Vault rewards on their flow day with a trailing 7-day mean: the mean
- * of the rows dated within the last seven UTC days (quiet days count as 0; a
- * day without a row is skipped). It is null for the first six days of history.
+ * Vault rewards summed per ISO week (UTC, Monday to Sunday) of their flow day,
+ * keyed by the Monday. Quiet days add 0. The latest week is left out until its
+ * Sunday has a row, so every bar is a complete week.
  */
-export const dailyRewards = (vault: AnalyticsData['vault']): Row[] => {
-  const rows = vault
-    .map(({flowDate, dailyRewards}) => ({
-      date: flowDate,
-      time: dayTime(flowDate),
-      dailyRewards,
+export const weeklyRewards = (vault: AnalyticsData['vault']): Row[] => {
+  const weeks = new Map<number, number>()
+  let latest = Number.NEGATIVE_INFINITY
+  for (const {flowDate, dailyRewards} of vault) {
+    const time = dayTime(flowDate)
+    // getUTCDay() is 0 on Sunday; ISO weeks start on Monday.
+    const monday = time - ((new Date(time).getUTCDay() + 6) % 7) * DAY_MS
+    weeks.set(monday, (weeks.get(monday) ?? 0) + dailyRewards)
+    latest = Math.max(latest, time)
+  }
+  return [...weeks]
+    .filter(([monday]) => monday + 6 * DAY_MS <= latest)
+    .sort(([a], [b]) => a - b)
+    .map(([time, rewards]) => ({
+      date: new Date(time).toISOString().slice(0, 10),
+      time,
+      rewards,
     }))
-    .sort((a, b) => a.time - b.time)
-  const first = rows[0]?.time ?? 0
-  let start = 0
-  let sum = 0
-  return rows.map((row, index) => {
-    sum += row.dailyRewards
-    while ((rows[start]?.time ?? row.time) <= row.time - 7 * DAY_MS)
-      sum -= rows[start++]?.dailyRewards ?? 0
-    return {
-      ...row,
-      average:
-        row.time - first >= 6 * DAY_MS ? sum / (index + 1 - start) : null,
-    }
-  })
 }
 
 /** Consecutive backfilled Cloud days as inclusive [first, last] date ranges. */

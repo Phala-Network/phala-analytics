@@ -5,7 +5,7 @@ import {
   TriangleAlertIcon,
 } from 'lucide-react'
 import {type ReactNode, useMemo} from 'react'
-import {ChartAreaCard} from '@/components/chart-area-card'
+import {ChartCard} from '@/components/chart-card'
 import {MetricCard} from '@/components/metric-card'
 import {PhalaLogo} from '@/components/phala-logo'
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert'
@@ -14,6 +14,7 @@ import {Button} from '@/components/ui/button'
 import {Separator} from '@/components/ui/separator'
 import {useAnalytics} from '@/hooks/use-analytics'
 import {
+  dayTime,
   formatCompact,
   formatDay,
   formatDayRange,
@@ -23,11 +24,11 @@ import {
 } from '@/lib/format'
 import {
   backfillRanges,
-  dailyRewards,
   latest,
   type Row,
   type Series,
   toRows,
+  weeklyRewards,
 } from '@/lib/series'
 import type {AnalyticsData} from '../worker/data'
 
@@ -42,10 +43,10 @@ const CIRCULATION: Series[] = [
 const VAULT: Series[] = [
   {key: 'totalAssets', label: 'Total assets', color: 'var(--chart-2)'},
 ]
-const REWARDS: Series[] = [
-  {key: 'average', label: '7-day average', color: 'var(--chart-2)'},
-  {key: 'dailyRewards', label: 'Daily'},
+const WEEKLY_REWARDS: Series[] = [
+  {key: 'rewards', label: 'Rewards', color: 'var(--chart-2)'},
 ]
+const DAILY_REWARDS: Series[] = [{key: 'dailyRewards', label: 'Daily rewards'}]
 const USERS: Series[] = [
   {key: 'totalUsers', label: 'Users', color: 'var(--chart-2)'},
 ]
@@ -120,7 +121,12 @@ const derive = (data: AnalyticsData) => {
         ({ethereum, phala, khala, total}) => ({ethereum, phala, khala, total}),
       ),
       vault: toRows(data.vault, ({totalAssets}) => ({totalAssets})),
-      rewards: dailyRewards(data.vault),
+      weeklyRewards: weeklyRewards(data.vault),
+      dailyRewards: data.vault.map(({flowDate, dailyRewards}) => ({
+        date: flowDate,
+        time: dayTime(flowDate),
+        dailyRewards,
+      })),
       cloud: toRows(
         data.cloud,
         ({totalUsers, totalVms, runningVms, totalVcpu, captured}) => ({
@@ -255,7 +261,7 @@ export function App() {
               </ExternalLink>
             }
           >
-            <ChartAreaCard
+            <ChartCard
               title="Circulating supply"
               description="By chain at 00:00 UTC each day, stacked (PHA)"
               rows={view?.rows.circulation}
@@ -328,18 +334,20 @@ export function App() {
               />
             </div>
             <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-2">
-              <ChartAreaCard
+              <ChartCard
                 title="Total assets"
                 description="At 00:00 UTC each day (PHA)"
                 rows={view?.rows.vault}
                 series={VAULT}
               />
-              <ChartAreaCard
-                title="Daily rewards"
-                description="Trailing 7-day average of rewards accrued each UTC day (PHA)"
-                rows={view?.rows.rewards}
-                series={REWARDS}
-                footer="The data table lists each day's rewards."
+              <ChartCard
+                title="Weekly rewards"
+                description="Rewards accrued per week, Monday to Sunday UTC (PHA)"
+                rows={view?.rows.weeklyRewards}
+                series={WEEKLY_REWARDS}
+                bars={{periodLabel: 'Week of'}}
+                table={{rows: view?.rows.dailyRewards, series: DAILY_REWARDS}}
+                footer="Complete weeks only; the data table lists each day's rewards, including the current week."
               />
             </div>
           </Section>
@@ -413,7 +421,7 @@ export function App() {
               />
             </div>
             <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-2">
-              <ChartAreaCard
+              <ChartCard
                 title="Users"
                 description="Daily total"
                 rows={view?.rows.cloud}
@@ -421,7 +429,7 @@ export function App() {
                 shaded={view?.shaded}
                 shadedLabel="recomputed"
               />
-              <ChartAreaCard
+              <ChartCard
                 title="VMs"
                 description="Total and running, daily"
                 rows={view?.rows.cloud}
@@ -429,13 +437,13 @@ export function App() {
                 shaded={view?.shaded}
                 shadedLabel="recomputed"
               />
-              <ChartAreaCard
+              <ChartCard
                 title="Total vCPUs"
                 description="Daily total"
                 rows={view?.rows.cloud}
                 series={VCPU}
               />
-              <ChartAreaCard
+              <ChartCard
                 title="Annual revenue in PHA"
                 description="Total vCPUs × 12 × $50, converted at that day's PHA price"
                 rows={view?.rows.cloud}

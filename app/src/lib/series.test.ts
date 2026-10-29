@@ -3,7 +3,7 @@ import type {AnalyticsData} from '../../worker/data'
 import {vaultDay} from '../../worker/fixtures'
 import {parseDay, VAULT_FIELDS} from '../../worker/subgraph'
 import {DAY_MS} from './format'
-import {backfillRanges, dailyRewards} from './series'
+import {backfillRanges, weeklyRewards} from './series'
 
 const vault = (flowDates: string[], rewards: number[]) =>
   flowDates.map((flowDate, index) => ({
@@ -16,74 +16,35 @@ const days = (first: string, count: number) =>
     new Date(Date.parse(first) + index * DAY_MS).toISOString().slice(0, 10),
   )
 
-test('daily rewards plot on their flow day with a trailing 7-day mean', () => {
-  const rows = dailyRewards(
-    vault(days('2026-01-01', 9), [7, 14, 21, 28, 35, 42, 49, 56, 0]),
+test('weekly rewards sum UTC ISO weeks from Monday, keyed by flow day', () => {
+  // 2026-10-18 is a Sunday, 2026-10-19 a Monday and 2026-11-01 a Sunday.
+  const flowDates = days('2026-10-18', 15)
+  const rows = weeklyRewards(
+    vault([...flowDates].reverse(), [...flowDates.keys()].reverse()),
   )
-  expect(rows.map((row) => row.date)).toEqual(days('2026-01-01', 9))
-  expect(rows.map((row) => row.dailyRewards)).toEqual([
-    7, 14, 21, 28, 35, 42, 49, 56, 0,
+  expect(rows.map(({date, rewards}) => [date, rewards])).toEqual([
+    ['2026-10-12', 0],
+    ['2026-10-19', 1 + 2 + 3 + 4 + 5 + 6 + 7],
+    ['2026-10-26', 8 + 9 + 10 + 11 + 12 + 13 + 14],
   ])
-  // Null until a full week is available, then the mean of the last seven days.
-  expect(rows.map((row) => row.average)).toEqual([
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    28,
-    35,
-    33,
+  expect(rows[1]?.time).toBe(Date.UTC(2026, 9, 19))
+})
+
+test('the latest week is left out until its Sunday has a row', () => {
+  const rows = weeklyRewards(vault(days('2026-10-19', 13), Array(13).fill(1)))
+  expect(rows.map(({date, rewards}) => [date, rewards])).toEqual([
+    ['2026-10-19', 7],
   ])
 })
 
-test('the 7-day mean skips days without a row', () => {
-  const dates = days('2026-01-01', 9).filter((date) => date !== '2026-01-04')
-  const rows = dailyRewards(
-    vault([...dates].reverse(), [80, 70, 60, 50, 40, 30, 20, 10]),
+test('quiet days count as 0 and a week of quiet days stays a 0 bar', () => {
+  const rows = weeklyRewards(
+    vault(days('2026-10-19', 14), [0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
   )
-  expect(rows.map((row) => row.date)).toEqual(dates)
-  // Jan 4 has no row, so each window from Jan 7 to Jan 9 holds six rows.
-  expect(rows.map((row) => row.average)).toEqual([
-    null,
-    null,
-    null,
-    null,
-    null,
-    (10 + 20 + 30 + 40 + 50 + 60) / 6,
-    (20 + 30 + 40 + 50 + 60 + 70) / 6,
-    (30 + 40 + 50 + 60 + 70 + 80) / 6,
+  expect(rows.map(({date, rewards}) => [date, rewards])).toEqual([
+    ['2026-10-19', 5],
+    ['2026-10-26', 0],
   ])
-})
-
-test('the 7-day mean varies far less from day to day than daily rewards', () => {
-  // Settlement-driven rewards: about 40k a day, uneven, with quiet days.
-  let seed = 7
-  const random = () => {
-    seed = (seed * 48271) % 2147483647
-    return seed / 2147483647
-  }
-  const rewards = Array.from({length: 365}, () =>
-    random() < 0.15 ? 0 : 40_000 * (0.2 + 1.6 * random()),
-  )
-  const rows = dailyRewards(vault(days('2025-01-01', 365), rewards))
-  const variation = (key: string) => {
-    const values = rows
-      .map((row) => row[key])
-      .filter((value): value is number => typeof value === 'number')
-    return (
-      values
-        .slice(1)
-        .reduce(
-          (sum, value, index) =>
-            sum + Math.abs(value - (values[index] ?? value)),
-          0,
-        ) /
-      (values.length - 1)
-    )
-  }
-  expect(variation('average')).toBeLessThan(variation('dailyRewards') / 4)
 })
 
 test('backfilled Cloud days group into consecutive ranges', () => {

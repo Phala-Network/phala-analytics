@@ -28,18 +28,22 @@ import {formatDay, formatNumber} from '@/lib/format'
 import {cellValue, type Row, type Series} from '@/lib/series'
 
 const ChartArea = lazy(() => import('./chart-area'))
+const ChartBar = lazy(() => import('./chart-bar'))
 
 /**
  * Chart card from the dashboard-01 block (chart-area-interactive) with a
- * collapsible data table listing every series, newest first.
+ * collapsible data table, newest first. The table lists the chart's rows and
+ * series unless `table` gives others.
  */
-export function ChartAreaCard({
+export function ChartCard({
   title,
   description,
   rows,
   series,
   shaded = [],
   shadedLabel,
+  bars,
+  table,
   headline,
   action,
   footer,
@@ -53,6 +57,9 @@ export function ChartAreaCard({
   shaded?: [string, string][]
   /** Table marker for rows inside `shaded`. */
   shadedLabel?: string
+  /** Draw the first colored series as bars; the tooltip prefixes each row's date. */
+  bars?: {periodLabel: string}
+  table?: {rows: Row[] | undefined; series: Series[]}
   headline?: ReactNode
   action?: ReactNode
   footer?: ReactNode
@@ -60,6 +67,8 @@ export function ChartAreaCard({
   const drawn = series.flatMap((item) =>
     item.color ? [{...item, color: item.color}] : [],
   )
+  const tableRows = table ? table.rows : rows
+  const tableSeries = table ? table.series : series
   const isShaded = (date: string) =>
     shaded.some(([first, last]) => first <= date && date <= last)
 
@@ -75,7 +84,14 @@ export function ChartAreaCard({
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
         <Suspense fallback={<Skeleton className="h-[250px] w-full" />}>
-          {rows ? (
+          {rows && bars && drawn[0] ? (
+            <ChartBar
+              title={title}
+              rows={rows}
+              series={drawn[0]}
+              periodLabel={bars.periodLabel}
+            />
+          ) : rows ? (
             <ChartArea
               title={title}
               rows={rows}
@@ -92,14 +108,14 @@ export function ChartAreaCard({
           <div className="leading-none text-muted-foreground">{footer}</div>
         )}
         <Collapsible className="w-full">
-          <CollapsibleTrigger asChild disabled={!rows}>
+          <CollapsibleTrigger asChild disabled={!tableRows}>
             <Button variant="ghost" size="sm" className="group -ml-2">
               <ChevronDownIcon className="transition-transform group-data-[state=open]:rotate-180" />
               Data table
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            {rows && (
+            {tableRows && (
               <section
                 className="max-h-80 overflow-auto"
                 aria-label={`${title} data`}
@@ -110,7 +126,7 @@ export function ChartAreaCard({
                   <TableHeader>
                     <TableRow>
                       <TableHead scope="col">Date (UTC)</TableHead>
-                      {series.map(({key, label}) => (
+                      {tableSeries.map(({key, label}) => (
                         <TableHead key={key} scope="col" className="text-right">
                           {label}
                         </TableHead>
@@ -118,7 +134,7 @@ export function ChartAreaCard({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rows.toReversed().map((row) => (
+                    {tableRows.toReversed().map((row) => (
                       <TableRow key={row.date}>
                         <TableHead scope="row" className="font-normal">
                           {formatDay(row.date)}
@@ -128,7 +144,7 @@ export function ChartAreaCard({
                             </span>
                           )}
                         </TableHead>
-                        {series.map(({key}) => (
+                        {tableSeries.map(({key}) => (
                           <TableCell
                             key={key}
                             className="text-right tabular-nums"

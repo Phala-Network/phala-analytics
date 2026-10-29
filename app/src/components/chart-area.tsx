@@ -19,7 +19,7 @@ import {formatCompact, formatDay, formatMonth, formatNumber} from '@/lib/format'
 import {cellValue, type Row, type Series} from '@/lib/series'
 
 /** Text alternative: the range and the latest value of each series. */
-const summary = (title: string, rows: Row[], series: Series[]) => {
+export const summary = (title: string, rows: Row[], series: Series[]) => {
   const first = rows[0]
   const last = rows.at(-1)
   if (!first || !last) return `${title}: no data yet.`
