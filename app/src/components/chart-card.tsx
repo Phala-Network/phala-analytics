@@ -45,6 +45,7 @@ export function ChartCard({
   bars,
   table,
   footer,
+  fractionDigits,
 }: {
   title: string
   description: string
@@ -52,10 +53,15 @@ export function ChartCard({
   rows: Row[] | undefined
   /** Series with a color are drawn; the others appear in the table only. */
   series: Series[]
-  /** Draw the first colored series as bars; the tooltip prefixes each row's date. */
-  bars?: {periodLabel: string}
+  /**
+   * Draw the colored series as bars; the tooltip prefixes each row's date with
+   * `periodLabel` when given.
+   */
+  bars?: {periodLabel?: string}
   table?: {rows: Row[] | undefined; series: Series[]}
   footer?: ReactNode
+  /** Decimals kept in area charts and the table; whole numbers by default. */
+  fractionDigits?: number
 }) {
   const drawn = series.flatMap((item) =>
     item.color ? [{...item, color: item.color}] : [],
@@ -74,15 +80,20 @@ export function ChartCard({
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
         <Suspense fallback={skeleton}>
-          {rows && bars && drawn[0] ? (
+          {rows && bars ? (
             <ChartBar
               title={title}
               rows={rows}
-              series={drawn[0]}
+              series={drawn}
               periodLabel={bars.periodLabel}
             />
           ) : rows ? (
-            <ChartArea title={title} rows={rows} series={drawn} />
+            <ChartArea
+              title={title}
+              rows={rows}
+              series={drawn}
+              fractionDigits={fractionDigits}
+            />
           ) : (
             skeleton
           )}
@@ -122,7 +133,7 @@ export function ChartCard({
                         </TableCell>
                         {tableSeries.map(({key}) => (
                           <TableCell key={key} className="text-right">
-                            {formatNumber(cellValue(row, key))}
+                            {formatNumber(cellValue(row, key), fractionDigits)}
                           </TableCell>
                         ))}
                       </TableRow>

@@ -4,7 +4,8 @@ This package serves the public Phala analytics dashboard and a
 JSON API from one Worker: `worker/` holds the API and hourly sync, `src/` the
 dashboard. Goldsky's `phala-ethereum/prod` subgraph provides chain history; D1
 is a rebuildable cache of its immutable daily entities.
-Historical Substrate Phala/Khala circulation comes from a frozen archive.
+Historical Substrate Phala/Khala circulation comes from a frozen archive, and
+the legacy CPU (TEE) Network history is a static file bundled with the page.
 Phala Cloud statistics are captured daily and backed up weekly to R2.
 See the [operations guide](../docs/OPERATIONS.md) for the wider stack and the
 [subgraph schema](../subgraph/schema.graphql) for source definitions.
@@ -230,6 +231,29 @@ routing, headers and self-hosting through `vite preview`. Local D1 starts
 empty: apply `migrations/0001_init.sql` and load rows through the dev server's
 local explorer, `POST /cdn-cgi/local/explorer/api/d1/database/<id>/raw` with
 `{"sql": ...}` or `{"batch": [{"sql", "params"}]}` (string parameters).
+
+### Legacy CPU (TEE) Network
+
+The collapsed "CPU (TEE) Network (legacy)" section shows the Phala and Khala
+computation networks until they ended: Khala from 2022-12-28 to 2025-01-10 and
+Phala from 2023-04-29 to 2025-11-19, its last non-empty snapshot. The data is
+`src/generated/legacy-cpu-tee.json`, per-chain daily columns from the archived
+Dune `dataset_phala_computation_snapshots` export (the same NDJSON as the
+seed). It is a separate hashed chunk, loaded only when the section is first
+expanded; it is not part of `/api/data` or D1. Regenerate it from `app/`:
+
+```bash
+bun scripts/legacy-cpu-tee.ts /path/to/snapshots.ndjson src/generated/legacy-cpu-tee.json
+```
+
+The generator fails unless each chain has every field on every day of its
+range, nothing outside it, and the export covers the days around it. Only
+Phala's APR and budget per share may be missing, before 2023-05-12.
+`src/lib/legacy-cpu-tee.ts` derives the charts as the Dune "History" query
+(3572546): online workers are idle workers; daily rewards are the day-over-day
+change in cumulative rewards (none on a chain's first day); totals sum the
+chains; average APR and budget per share are weighted by the delegation value
+of the chains that report them.
 
 ### Seed, verify and deploy
 

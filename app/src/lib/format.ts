@@ -29,8 +29,16 @@ const month = new Intl.DateTimeFormat(undefined, {
 
 export const DAY_MS = 86_400_000
 
-export const formatNumber = (value: number | null | undefined) =>
-  value == null ? '–' : integer.format(value)
+/** Whole numbers, or up to `fractionDigits` decimals. */
+export const formatNumber = (
+  value: number | null | undefined,
+  fractionDigits = 0,
+) =>
+  value == null
+    ? '–'
+    : fractionDigits
+      ? value.toLocaleString(undefined, {maximumFractionDigits: fractionDigits})
+      : integer.format(value)
 export const formatCompact = (value: number) => compact.format(value)
 export const formatPercent = (value: number) => percent.format(value)
 
