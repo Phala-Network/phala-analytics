@@ -195,13 +195,16 @@ editing them. Light and dark follow the system preference through the
 template's `ThemeProvider`. Recharts loads as a separate chunk, so figures and
 skeletons render first. Every chart has a data table.
 
-Dates are UTC days and numbers use `Intl`. Circulation is stacked by chain.
-Vault rewards are summed per ISO week (Monday to Sunday UTC) of their
-`flowDate` and drawn as bars. The latest week appears once its Sunday has a
+Dates are UTC days and numbers use `Intl`. Exact timestamps (the live figures
+and the data update time) follow the header's Local / UTC toggle, which
+defaults to Local, shows the short zone name, and is stored in `localStorage`
+like the theme; daily dates, charts and tables stay UTC days. Circulation is
+stacked by chain. Vault rewards are summed per ISO week (Monday to Sunday
+UTC) of their `flowDate` and drawn as bars. The latest week appears once its Sunday has a
 row; the first week may be partial because Vault history starts midweek.
 The data table lists each day, including the current week.
 Circulating supply, Vault total assets, APR, stakers and the claim totals use
-`live` when present, labeled with its UTC time; otherwise they show the latest
+`live` when present, labeled with its time; otherwise they show the latest
 daily rows. Live same-day claims are added to the daily totals only when the
 latest `claims` row's `date` equals `live.claims.flowDate`, so no day is skipped
 or counted twice around midnight. Charts and Phala Cloud stay daily. The
