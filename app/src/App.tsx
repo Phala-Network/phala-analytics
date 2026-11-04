@@ -1,5 +1,11 @@
-import {DownloadIcon, InfoIcon, TriangleAlertIcon} from 'lucide-react'
-import {type ReactNode, useMemo} from 'react'
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  DownloadIcon,
+  InfoIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
+import {type ReactNode, useMemo, useState} from 'react'
 import {ChartCard} from '@/components/chart-card'
 import {MetricCard} from '@/components/metric-card'
 import {PhalaLogo} from '@/components/phala-logo'
@@ -18,8 +24,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {Separator} from '@/components/ui/separator'
 import {useAnalytics} from '@/hooks/use-analytics'
+import {useLegacyCpuTee} from '@/hooks/use-legacy-cpu-tee'
 import {
   dayTime,
   formatCompact,
@@ -29,6 +41,7 @@ import {
   formatTimestamp,
 } from '@/lib/format'
 import {
+  cellValue,
   claimTotals,
   latest,
   type Row,
@@ -73,6 +86,32 @@ const VCPU: Series[] = [
 const REVENUE: Series[] = [
   {key: 'captured', label: 'Annual revenue', color: 'var(--chart-2)'},
 ]
+// Legacy CPU (TEE) metrics by chain (keys from legacyRows), colored as in
+// CIRCULATION. Sums are stacked with the total in the table; averages are
+// drawn with the per-chain values.
+const legacySeries = (metric: string, average = false): Series[] => [
+  {
+    key: `${metric}_phala`,
+    label: 'Phala',
+    color: 'var(--chart-5)',
+    stack: !average,
+  },
+  {
+    key: `${metric}_khala`,
+    label: 'Khala',
+    color: 'var(--chart-1)',
+    stack: !average,
+  },
+  average
+    ? {key: metric, label: 'Average', color: 'var(--chart-3)'}
+    : {key: metric, label: 'Total'},
+]
+const LEGACY_WORKERS = legacySeries('workers')
+const LEGACY_REWARDS = legacySeries('rewards')
+const LEGACY_VALUE = legacySeries('value')
+const LEGACY_DELEGATORS = legacySeries('delegators')
+const LEGACY_APR = legacySeries('apr', true)
+const LEGACY_BUDGET = legacySeries('budget', true)
 
 const LINKS = [
   {href: 'https://phala.com', label: 'Website'},
@@ -86,6 +125,9 @@ const CARDS =
 // The same grid with two columns, for two cards per row.
 const CARDS_2 =
   'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 dark:*:data-[slot=card]:bg-card'
+// The same grid with three columns, for six cards.
+const CARDS_3 =
+  'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-3 dark:*:data-[slot=card]:bg-card'
 // Chart cards use two columns at the dashboard grid breakpoint.
 const CHARTS = 'grid grid-cols-1 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-2'
 
@@ -193,6 +235,126 @@ const Link = ({href, children}: {href: string; children: ReactNode}) => (
     {children}
   </a>
 )
+
+/**
+ * The frozen CPU (TEE) Network history, collapsed by default. Its data is a
+ * separate chunk, loaded on first expand.
+ */
+function LegacyCpuTee() {
+  const [open, setOpen] = useState(false)
+  const {state, retry} = useLegacyCpuTee(open)
+  const rows = state.status === 'ready' ? state.rows : undefined
+  const last = rows?.at(-1)
+  const asOf = last && `As of ${formatDay(last.date)}`
+  const counter = (key: string, fractionDigits?: number) =>
+    last && formatNumber(cellValue(last, key), fractionDigits)
+  const apr = last && cellValue(last, 'apr')
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="flex flex-col gap-4 md:gap-6"
+    >
+      <div className="px-4 lg:px-6">
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" size="sm">
+            {open ? <ChevronUpIcon /> : <ChevronDownIcon />}
+            {open ? 'Hide' : 'Show'} CPU (TEE) Network history
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent className="flex flex-col gap-4 md:gap-6">
+        {state.status === 'error' && (
+          <div className="px-4 lg:px-6">
+            <Alert variant="destructive">
+              <TriangleAlertIcon />
+              <AlertTitle>CPU (TEE) Network history failed to load.</AlertTitle>
+              <AlertAction>
+                <Button size="xs" variant="default" onClick={retry}>
+                  Retry
+                </Button>
+              </AlertAction>
+            </Alert>
+          </div>
+        )}
+        <div className={CARDS_3}>
+          <MetricCard
+            label="Online workers"
+            value={counter('workers')}
+            secondary={asOf}
+          />
+          <MetricCard
+            label="Daily rewards (PHA)"
+            value={counter('rewards')}
+            secondary={asOf}
+          />
+          <MetricCard
+            label="Delegation value (PHA)"
+            value={counter('value')}
+            secondary={asOf}
+          />
+          <MetricCard
+            label="Delegators"
+            value={counter('delegators')}
+            secondary={asOf}
+          />
+          <MetricCard
+            label="Average APR"
+            value={last && (apr == null ? '–' : formatPercent(apr / 100))}
+            secondary={asOf}
+          />
+          <MetricCard
+            label="Budget per share"
+            value={counter('budget', 2)}
+            secondary={asOf}
+          />
+        </div>
+        <div className={CHARTS}>
+          <ChartCard
+            title="Online workers"
+            description="Computing workers at 00:00 UTC each day, by chain, stacked"
+            rows={rows}
+            series={LEGACY_WORKERS}
+          />
+          <ChartCard
+            title="Daily rewards"
+            description="Rewards in the 24 hours to 00:00 UTC each day, by chain, stacked (PHA)"
+            rows={rows}
+            series={LEGACY_REWARDS}
+            bars={{}}
+          />
+          <ChartCard
+            title="Delegation value"
+            description="At 00:00 UTC each day, by chain, stacked (PHA)"
+            rows={rows}
+            series={LEGACY_VALUE}
+          />
+          <ChartCard
+            title="Delegators"
+            description="At 00:00 UTC each day, by chain, stacked"
+            rows={rows}
+            series={LEGACY_DELEGATORS}
+          />
+          <ChartCard
+            title="Average APR"
+            description="By chain and weighted by delegation value, at 00:00 UTC each day (%)"
+            rows={rows}
+            series={LEGACY_APR}
+            fractionDigits={2}
+          />
+          <ChartCard
+            title="Budget per share"
+            description="By chain and weighted by delegation value, at 00:00 UTC each day"
+            rows={rows}
+            series={LEGACY_BUDGET}
+            fractionDigits={2}
+          />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
 
 export function App() {
   const {state, retry} = useAnalytics()
@@ -458,6 +620,14 @@ export function App() {
                 series={REVENUE}
               />
             </div>
+          </Section>
+
+          <Section
+            id="cpu-tee"
+            title="CPU (TEE) Network (legacy)"
+            description="Frozen daily snapshots of CPU (TEE) computation on the Phala and Khala chains. The data ends with the chains: Khala on January 10, 2025, and Phala on November 19, 2025, when the Phala parachain ended."
+          >
+            <LegacyCpuTee />
           </Section>
 
           <footer className="px-4 lg:px-6">

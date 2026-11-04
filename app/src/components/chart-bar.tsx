@@ -13,8 +13,8 @@ import {summary} from './chart-area'
 
 /**
  * Bar chart from the shadcn/ui chart examples (chart-bar-interactive) with the
- * axis from chart-area-axes and legend from chart-bar-multiple.
- * Each row is one period labelled by its first day.
+ * axis from chart-area-axes, legend from chart-bar-multiple and stacking from
+ * chart-bar-stacked. Each row is one period labelled by its first day.
  */
 export default function ChartBar({
   title,
@@ -24,27 +24,33 @@ export default function ChartBar({
 }: {
   title: string
   rows: Row[]
-  /** One drawn series; its color is a theme variable such as `var(--chart-2)`. */
-  series: Series & {color: string}
+  /** Drawn series; colors are theme variables such as `var(--chart-2)`. */
+  series: (Series & {color: string})[]
   /** Tooltip label prefix for a period's first day, e.g. "Week of". */
-  periodLabel: string
+  periodLabel?: string
 }) {
-  const {key, label, color} = series
-  const chartConfig = {[key]: {label}} satisfies ChartConfig
+  const chartConfig = Object.fromEntries(
+    series.map(({key, label}) => [key, {label}]),
+  ) satisfies ChartConfig
   // ChartConfig colors would be injected as a <style> element, which the CSP
-  // blocks; the --color-* variable is set on the container instead.
+  // blocks; the --color-* variables are set on the container instead.
+  const colors = Object.fromEntries(
+    series.map(({key, color}) => [`--color-${key}`, color]),
+  )
   const chartData = rows.map((row) => ({
     date: row.date,
-    [key]: Math.round(cellValue(row, key) ?? 0),
+    ...Object.fromEntries(
+      series.map(({key}) => [key, Math.round(cellValue(row, key) ?? 0)]),
+    ),
   }))
 
   return (
     <ChartContainer
       config={chartConfig}
       className="aspect-auto h-[250px] w-full"
-      style={{[`--color-${key}`]: color}}
+      style={colors}
       role="img"
-      aria-label={summary(title, rows, [series])}
+      aria-label={summary(title, rows, series)}
     >
       <BarChart data={chartData} accessibilityLayer={false}>
         <CartesianGrid vertical={false} />
@@ -68,19 +74,25 @@ export default function ChartBar({
           content={
             <ChartTooltipContent
               labelFormatter={(value) =>
-                typeof value === 'string'
-                  ? `${periodLabel} ${formatDay(value)}`
-                  : value
+                typeof value !== 'string'
+                  ? value
+                  : periodLabel
+                    ? `${periodLabel} ${formatDay(value)}`
+                    : formatDay(value)
               }
             />
           }
         />
         <ChartLegend content={<ChartLegendContent />} />
-        <Bar
-          dataKey={key}
-          fill={`var(--color-${key})`}
-          isAnimationActive={false}
-        />
+        {series.map(({key, stack}) => (
+          <Bar
+            key={key}
+            dataKey={key}
+            fill={`var(--color-${key})`}
+            stackId={stack ? 'a' : undefined}
+            isAnimationActive={false}
+          />
+        ))}
       </BarChart>
     </ChartContainer>
   )

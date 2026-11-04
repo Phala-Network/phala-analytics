@@ -15,7 +15,12 @@ import {cellValue, type Row, type Series} from '@/lib/series'
  * Text alternative: the range and latest actual value of each series, then
  * where each dashed (projected) series ends.
  */
-export const summary = (title: string, rows: Row[], series: Series[]) => {
+export const summary = (
+  title: string,
+  rows: Row[],
+  series: Series[],
+  fractionDigits = 0,
+) => {
   const actual = series.filter(({dashed}) => !dashed)
   const first = rows[0]
   const last =
@@ -26,7 +31,9 @@ export const summary = (title: string, rows: Row[], series: Series[]) => {
   const latest = actual
     .map(({key, label}) => {
       const row = rows.findLast((item) => cellValue(item, key) != null)
-      return row ? `${label} ${formatNumber(cellValue(row, key))}` : null
+      return row
+        ? `${label} ${formatNumber(cellValue(row, key), fractionDigits)}`
+        : null
     })
     .filter(Boolean)
     .join(', ')
@@ -52,11 +59,14 @@ export default function ChartArea({
   title,
   rows,
   series,
+  fractionDigits = 0,
 }: {
   title: string
   rows: Row[]
   /** Drawn series; colors are theme variables such as `var(--chart-1)`. */
   series: (Series & {color: string})[]
+  /** Decimals kept in values; whole numbers by default. */
+  fractionDigits?: number
 }) {
   const id = useId().replaceAll(':', '')
   const chartConfig = Object.fromEntries(
@@ -68,7 +78,8 @@ export default function ChartArea({
     series.map(({key, color}) => [`--color-${key}`, color]),
   )
   // Stacks need numbers where a row has the key; rows without it (projected
-  // days) leave a gap. Whole PHA keep tooltips readable.
+  // days) leave a gap. Rounding (to whole PHA by default) keeps tooltips
+  // readable.
   const chartData = rows.map((row) => ({
     date: row.date,
     ...Object.fromEntries(
@@ -76,7 +87,11 @@ export default function ChartArea({
         const value = cellValue(row, key)
         return [
           key,
-          value == null ? (stack && key in row ? 0 : null) : Math.round(value),
+          value == null
+            ? stack && key in row
+              ? 0
+              : null
+            : Number(value.toFixed(fractionDigits)),
         ]
       }),
     ),
@@ -88,7 +103,7 @@ export default function ChartArea({
       className="aspect-auto h-[250px] w-full"
       style={colors}
       role="img"
-      aria-label={summary(title, rows, series)}
+      aria-label={summary(title, rows, series, fractionDigits)}
     >
       <AreaChart data={chartData} accessibilityLayer={false}>
         <defs>
