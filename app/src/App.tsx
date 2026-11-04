@@ -9,6 +9,7 @@ import {type ReactNode, useMemo, useState} from 'react'
 import {ChartCard} from '@/components/chart-card'
 import {MetricCard} from '@/components/metric-card'
 import {PhalaLogo} from '@/components/phala-logo'
+import {useTimeZone} from '@/components/time-zone-provider'
 import {
   Alert,
   AlertAction,
@@ -30,6 +31,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import {Separator} from '@/components/ui/separator'
+import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group'
 import {useAnalytics} from '@/hooks/use-analytics'
 import {useLegacyCpuTee} from '@/hooks/use-legacy-cpu-tee'
 import {
@@ -39,6 +41,8 @@ import {
   formatNumber,
   formatPercent,
   formatTimestamp,
+  isTimeZone,
+  type TimeZone,
 } from '@/lib/format'
 import {
   cellValue,
@@ -113,6 +117,8 @@ const LEGACY_DELEGATORS = legacySeries('delegators')
 const LEGACY_APR = legacySeries('apr', true)
 const LEGACY_BUDGET = legacySeries('budget', true)
 
+const TIME_ZONE_LABEL = 'Time zone for update times. Chart dates are UTC days.'
+
 const LINKS = [
   {href: 'https://phala.com', label: 'Website'},
   {href: 'https://phala.com/x', label: 'X'},
@@ -131,12 +137,12 @@ const CARDS_3 =
 // Chart cards use two columns at the dashboard grid breakpoint.
 const CHARTS = 'grid grid-cols-1 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-2'
 
-const derive = (data: AnalyticsData) => {
+const derive = (data: AnalyticsData, timeZone: TimeZone) => {
   const {live} = data
   const vault = data.vault.at(-1)
   const reviewed = vault?.vaultImplementationReviewed !== false
   // Live figures replace the latest daily row when the subgraph read succeeds.
-  const liveAsOf = live && `As of ${formatTimestamp(live.timestamp)}`
+  const liveAsOf = live && `As of ${formatTimestamp(live.timestamp, timeZone)}`
   const vaultAsOf = liveAsOf ?? (vault && `As of ${formatDay(vault.date)}`)
   const totalAssets = live?.vaultTotalAssets ?? vault?.totalAssets
   const apr = live?.apr ?? vault?.apr
@@ -154,9 +160,9 @@ const derive = (data: AnalyticsData) => {
     }
   }
   return {
-    updated: formatTimestamp(data.generatedAt),
+    updated: formatTimestamp(data.generatedAt, timeZone),
     circulation: formatNumber(data.realtime.totalCirculation),
-    circulationAsOf: formatTimestamp(data.realtime.timestamp),
+    circulationAsOf: formatTimestamp(data.realtime.timestamp, timeZone),
     vault: {
       reviewed,
       vaultAsOf,
@@ -358,24 +364,26 @@ function LegacyCpuTee() {
 
 export function App() {
   const {state, retry} = useAnalytics()
+  const {timeZone, setTimeZone} = useTimeZone()
   const view = useMemo(
-    () => (state.status === 'ready' ? derive(state.data) : undefined),
-    [state],
+    () => (state.status === 'ready' ? derive(state.data, timeZone) : undefined),
+    [state, timeZone],
   )
   const claims = view?.claims
 
   return (
     <>
       {/* SiteHeader from dashboard-01; the links follow its GitHub button.
-          The shared max width follows the shadcn/ui site's --breakpoint-2xl page width. */}
+          The shared max width follows the shadcn/ui site's --breakpoint-2xl page width.
+          Below sm the title is visually hidden so the time zone toggle fits. */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b">
         <div className="mx-auto flex w-full max-w-(--breakpoint-2xl) items-center gap-1 px-4 lg:gap-2 lg:px-6">
           <PhalaLogo className="h-6 w-auto" />
           <Separator
             orientation="vertical"
-            className="mx-2 data-vertical:h-4 data-vertical:self-auto"
+            className="mx-2 data-vertical:h-4 data-vertical:self-auto max-sm:hidden"
           />
-          <h1 className="text-base font-medium">
+          <h1 className="text-base font-medium max-sm:sr-only">
             <span className="sr-only">Phala </span>Analytics
           </h1>
           <nav
@@ -390,6 +398,19 @@ export function App() {
               </Button>
             ))}
           </nav>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={timeZone}
+            onValueChange={(value) => isTimeZone(value) && setTimeZone(value)}
+            aria-label={TIME_ZONE_LABEL}
+            title={TIME_ZONE_LABEL}
+          >
+            <ToggleGroupItem value="local">Local</ToggleGroupItem>
+            <ToggleGroupItem value="utc">UTC</ToggleGroupItem>
+          </ToggleGroup>
         </div>
       </header>
 
